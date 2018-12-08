@@ -1,0 +1,10 @@
+{
+  "Host": "192.168.27.160",
+  "Port": 6379,
+  "Password": "wallet828",
+  "MaxIdle": 150,
+  "MaxActive": 150,
+  "IdleTimeout": 240,
+  "Network": "tcp",
+  "LockTimeout": 15
+}

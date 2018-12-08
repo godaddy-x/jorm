@@ -1,0 +1,10 @@
+{
+  "DsName": "TEST",
+  "Host": "192.168.27.160",
+  "Port": 3306,
+  "Database": "openwallet",
+  "Username": "wallet",
+  "Password": "wallet_20180828",
+  "Debug": true,
+  "CacheSync": true
+}

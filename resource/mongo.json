@@ -1,0 +1,13 @@
+{
+  "DsName": "TEST",
+  "Addrs": [
+    "192.168.27.160:27017"
+  ],
+  "Direct": false,
+  "Timeout": 5,
+  "Database": "openwallet",
+  "Username": "admin123",
+  "Password": "wallet828",
+  "PoolLimit": 4096,
+  "Debug": true
+}
