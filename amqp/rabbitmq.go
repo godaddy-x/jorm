@@ -144,7 +144,7 @@ func (self *AmqpManager) Publish(data MsgData) error {
 }
 
 // 监听指定队列消息
-func (self *AmqpManager) Pull(data LisData, callback func(body string) (MsgData, error)) (err error) {
+func (self *AmqpManager) Pull(data LisData, callback func(msg MsgData) (MsgData, error)) (err error) {
 	if len(data.Exchange) == 0 || len(data.Queue) == 0 {
 		return errors.New(util.AddStr("exchange,queue不能为空"))
 	}
@@ -178,18 +178,25 @@ func (self *AmqpManager) Pull(data LisData, callback func(body string) (MsgData,
 	for d := range delivery {
 		body := string(d.Body)
 		if len(body) > 0 {
-			call, err := callback(body)
-			if err != nil {
-				log.Println(util.AddStr("exchange[", call.Exchange, "] - queue[", call.Queue, "] 监听处理异常: ", err.Error()))
-				if data.SendMgo {
-					uuid, _ := util.StrToInt64(util.GetUUID())
-					errlog := MQErrorLog{Id: uuid, Exchange: call.Exchange, Queue: call.Queue, Type: call.Type, Retries: call.Retries, Delay: call.Delay, Content: call.Content, Error: err.Error(), Ctime: util.Time(), Utime: util.Time(), State: 1}
-					if mongo, err := new(sqld.MGOManager).Get(); err != nil {
-						log.Println(err.Error())
-					} else {
-						defer mongo.Close()
-						if err := mongo.Save(&errlog); err != nil {
+			message := MsgData{}
+			if err := util.JsonToObject(body, &message); err != nil {
+				log.Println(util.AddStr("exchange[", data.Exchange, "] - queue[", data.Queue, "] 监听处理转换JSON失败: ", err.Error()))
+			} else if message.Content == nil {
+				log.Println(util.AddStr("exchange[", data.Exchange, "] - queue[", data.Queue, "] 监听处理数据为空"))
+			} else {
+				call, err := callback(message)
+				if err != nil {
+					log.Println(util.AddStr("exchange[", call.Exchange, "] - queue[", call.Queue, "] 监听处理异常: ", err.Error()))
+					if data.SendMgo {
+						uuid, _ := util.StrToInt64(util.GetUUID())
+						errlog := MQErrorLog{Id: uuid, Exchange: call.Exchange, Queue: call.Queue, Type: call.Type, Retries: call.Retries, Delay: call.Delay, Content: call.Content, Error: err.Error(), Ctime: util.Time(), Utime: util.Time(), State: 1}
+						if mongo, err := new(sqld.MGOManager).Get(); err != nil {
 							log.Println(err.Error())
+						} else {
+							defer mongo.Close()
+							if err := mongo.Save(&errlog); err != nil {
+								log.Println(err.Error())
+							}
 						}
 					}
 				}
