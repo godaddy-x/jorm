@@ -51,6 +51,7 @@ type LisData struct {
 	Kind          string
 	PrefetchCount int
 	PrefetchSize  int
+	SendMgo       bool
 }
 
 // Amqp消息异常日志
@@ -177,17 +178,19 @@ func (self *AmqpManager) Pull(data LisData, callback func(body string) (MsgData,
 	for d := range delivery {
 		body := string(d.Body)
 		if len(body) > 0 {
-			data, err := callback(body)
+			call, err := callback(body)
 			if err != nil {
-				log.Println(util.AddStr("exchange[", data.Exchange, "] - queue[", data.Queue, "] 监听处理异常: ", err.Error()))
-				uuid, _ := util.StrToInt64(util.GetUUID())
-				errlog := MQErrorLog{Id: uuid, Exchange: data.Exchange, Queue: data.Queue, Type: data.Type, Retries: data.Retries, Delay: data.Delay, Content: data.Content, Error: err.Error(), Ctime: util.Time(), Utime: util.Time(), State: 1}
-				if mongo, err := new(sqld.MGOManager).Get(); err != nil {
-					log.Println(err.Error())
-				} else {
-					defer mongo.Close()
-					if err := mongo.Save(&errlog); err != nil {
+				log.Println(util.AddStr("exchange[", call.Exchange, "] - queue[", call.Queue, "] 监听处理异常: ", err.Error()))
+				if data.SendMgo {
+					uuid, _ := util.StrToInt64(util.GetUUID())
+					errlog := MQErrorLog{Id: uuid, Exchange: call.Exchange, Queue: call.Queue, Type: call.Type, Retries: call.Retries, Delay: call.Delay, Content: call.Content, Error: err.Error(), Ctime: util.Time(), Utime: util.Time(), State: 1}
+					if mongo, err := new(sqld.MGOManager).Get(); err != nil {
 						log.Println(err.Error())
+					} else {
+						defer mongo.Close()
+						if err := mongo.Save(&errlog); err != nil {
+							log.Println(err.Error())
+						}
 					}
 				}
 			}
