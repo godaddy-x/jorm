@@ -415,9 +415,18 @@ func LowerFirst(str string) string {
 	return upperStr
 }
 
-// 获取雪花UUID
-func GetUUID() string {
-	return new(snowflake.Node).Generate().String()
+// 获取雪花UUID,默认为0区
+func GetUUID(sec ...int64) string {
+	seed := int64(0)
+	if sec != nil && len(sec) > 0 && sec[0] > 0 {
+		seed = sec[0]
+	}
+	if node, err := snowflake.NewNode(seed); err != nil {
+		log.Println(err.Error())
+		return ""
+	} else {
+		return node.Generate().String()
+	}
 }
 
 // 校验是否跳过入库字段

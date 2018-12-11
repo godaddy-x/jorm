@@ -71,6 +71,7 @@ func (self *ConsulManager) InitConfig(input ...ConsulConfig) (*ConsulManager, er
 		if err := util.ReadJsonConfig(data, result); err != nil {
 			panic(err)
 		}
+		result.Node = conf.Node
 		manager.Config = result
 		consul_sessions[conf.Host] = manager
 	}
