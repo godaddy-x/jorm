@@ -21,12 +21,15 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 var (
 	cst_sh, _  = time.LoadLocation("Asia/Shanghai") //上海
 	time_formt = "2006-01-02 15:04:05"
+	snowflakes = make(map[int64]*snowflake.Node, 0)
+	mu         sync.Mutex
 )
 
 // 对象转JSON字符串
@@ -421,12 +424,17 @@ func GetUUID(sec ...int64) string {
 	if sec != nil && len(sec) > 0 && sec[0] > 0 {
 		seed = sec[0]
 	}
-	if node, err := snowflake.NewNode(seed); err != nil {
-		log.Println(err.Error())
-		return ""
-	} else {
-		return node.Generate().String()
+	node, ok := snowflakes[seed];
+	if !ok || node == nil {
+		mu.Lock()
+		node, ok = snowflakes[seed];
+		if !ok || node == nil {
+			node, _ = snowflake.NewNode(seed)
+			snowflakes[seed] = node
+		}
+		mu.Unlock()
 	}
+	return node.Generate().String()
 }
 
 // 校验是否跳过入库字段
