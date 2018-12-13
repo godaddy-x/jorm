@@ -8,6 +8,8 @@ package util
 import (
 	"bytes"
 	"crypto/md5"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -522,7 +524,45 @@ func MD5(s string, salt ...string) string {
 	if len(salt) > 0 {
 		s = salt[0] + s
 	}
-	data := []byte(s)
-	has := md5.Sum(data)
+	has := md5.Sum([]byte(s))
 	return fmt.Sprintf("%x", has) //将[]byte转成16进制
+}
+
+// SHA256加密
+func SHA256(s string, salt ...string) string {
+	if len(salt) > 0 {
+		s = salt[0] + s
+	}
+	h := sha256.New()
+	h.Write([]byte(s))
+	bs := h.Sum(nil)
+	return fmt.Sprintf("%x", bs) //将[]byte转成16进制
+}
+
+// default base64 - 正向
+func Base64Encode(input string) string {
+	return base64.StdEncoding.EncodeToString([]byte(input))
+}
+
+// url base64 - 正向
+func Base64URLEncode(input string) string {
+	return base64.URLEncoding.EncodeToString([]byte(input))
+}
+
+// default base64 - 逆向
+func Base64Decode(input string) string {
+	if r, err := base64.StdEncoding.DecodeString(input); err != nil {
+		return ""
+	} else {
+		return string(r)
+	}
+}
+
+// url base64 - 逆向
+func Base64URLDecode(input string) string {
+	if r, err := base64.URLEncoding.DecodeString(input); err != nil {
+		return ""
+	} else {
+		return string(r)
+	}
 }

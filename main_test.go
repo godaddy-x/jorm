@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/godaddy-x/jorm/cache/redis"
+	"github.com/godaddy-x/jorm/jwt"
 	"github.com/godaddy-x/jorm/sqlc"
 	"github.com/godaddy-x/jorm/sqld"
 	"github.com/godaddy-x/jorm/util"
@@ -90,16 +91,16 @@ func TestMysql(t *testing.T) {
 }
 
 func TestMongo(t *testing.T) {
-	db, err := new(sqld.MGOManager).Get(sqld.Option{DsName: "TEST"})
-	if err != nil {
-		fmt.Println(err.Error())
-	} else {
-		wallet := MGUser{}
-		if err := db.FindOne(sqlc.M(MGUser{}).Eq("_id", 1068800540239986688).Cache(sqlc.CacheConfig{Key: "mytest", Expire: 30}), &wallet); err != nil {
-			fmt.Println(err.Error())
-		}
-		fmt.Println(wallet)
-	}
+	//db, err := new(sqld.MGOManager).Get(sqld.Option{DsName: "TEST"})
+	//if err != nil {
+	//	fmt.Println(err.Error())
+	//} else {
+	//	wallet := MGUser{}
+	//	if err := db.FindOne(sqlc.M(MGUser{}).Eq("_id", 1068800540239986688).Cache(sqlc.CacheConfig{Key: "mytest", Expire: 30}), &wallet); err != nil {
+	//		fmt.Println(err.Error())
+	//	}
+	//	fmt.Println(wallet)
+	//}
 }
 
 func TestRedis(t *testing.T) {
@@ -117,5 +118,17 @@ func TestRedis(t *testing.T) {
 		//s := ""
 		//client.Del("test")
 		fmt.Println(client.Size("tx.block.coin.BTC"))
+	}
+}
+
+func TestJWT(t *testing.T) {
+	subject := &jwt.Subject{
+		Payload: &jwt.Payload{Sub: "admin", Iss: jwt.JWT, Exp: 3000, Nbf: 0},
+	}
+	secret := "123456789"
+	result, _ := subject.Generate(secret)
+	fmt.Println(result)
+	if err := subject.Valid(result, secret); err != nil {
+		fmt.Println(err)
 	}
 }
