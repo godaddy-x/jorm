@@ -1,5 +1,10 @@
 package jwt
 
+/**
+ * @author shadow
+ * @createby 2018.12.13
+ */
+
 import (
 	"github.com/godaddy-x/jorm/util"
 	"strings"
@@ -31,13 +36,14 @@ type Header struct {
 }
 
 type Payload struct {
-	Sub string            `json:"sub"` // 签发对象
-	Iss string            `json:"iss"` // 签发主体
-	Iat int64             `json:"iat"` // 签发时间
+	Sub string            `json:"sub"` // 用户主体
+	Aud string            `json:"aud"` // 接收token主体
+	Iss string            `json:"iss"` // 签发token主体
+	Iat int64             `json:"iat"` // 授权token时间
 	Exp int64             `json:"exp"` // 授权token过期时间
 	Rxp int64             `json:"rxp"` // 续期token过期时间
-	Nbf int64             `json:"nbf"` // 认证此时间之前不能被接收处理
-	Jti string            `json:"jti"` // 认证唯一标识
+	Nbf int64             `json:"nbf"` // 定义在什么时间之前,该token都是不可用的
+	Jti string            `json:"jti"` // 唯一身份标识,主要用来作为一次性token,从而回避重放攻击
 	Ext map[string]string `json:"ext"` // 扩展信息
 }
 
@@ -100,7 +106,7 @@ func (self *Subject) Generate(secret string, refresh ...bool) (*Authorization, e
 }
 
 // 校验Token
-func (self *Subject) Valid(accessToken, secret string) error {
+func (self *Subject) Valid(accessToken, secret string, aud ...string) error {
 	if len(accessToken) == 0 {
 		return util.Error("accessToken is nil")
 	}
@@ -146,6 +152,11 @@ func (self *Subject) Valid(accessToken, secret string) error {
 	if len(payload.Sub) == 0 {
 		return util.Error("sub invalid")
 	}
+	if len(payload.Aud) > 0 {
+		if aud == nil || len(aud) == 0 || aud[0] != payload.Aud {
+			return util.Error("aud invalid")
+		}
+	}
 	self.Header = header
 	self.Payload = payload
 	return nil
@@ -158,7 +169,7 @@ func (self *Subject) Refresh(accessToken, refreshToken, secret string, accessTim
 		return nil, util.Error("accessTime error")
 	}
 	if current-accessTime < QUARTER_HOUR {
-		return nil, util.Error("it must be more than 15 minutes.")
+		return nil, util.Error("it must be more than 15 minutes")
 	}
 	validRefreshToken := util.SHA256(util.AddStr(accessToken, ".", util.AnyToStr(accessTime), ".", secret))
 	if validRefreshToken != refreshToken {
@@ -175,6 +186,7 @@ func (self *Subject) Refresh(accessToken, refreshToken, secret string, accessTim
 	}
 	payload := &Payload{
 		Sub: self.Payload.Sub,
+		Aud: self.Payload.Aud,
 		Iss: self.Payload.Iss,
 		Exp: self.Payload.Exp - self.Payload.Iat,
 		Rxp: self.Payload.Rxp,

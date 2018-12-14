@@ -34,6 +34,11 @@ var (
 	mu         sync.Mutex
 )
 
+func init() {
+	node, _ := snowflake.NewNode(0)
+	snowflakes[0] = node
+}
+
 // 对象转JSON字符串
 func ObjectToJson(src interface{}) (string, error) {
 	var json = jsoniter.ConfigCompatibleWithStandardLibrary
