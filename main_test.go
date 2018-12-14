@@ -123,12 +123,25 @@ func TestRedis(t *testing.T) {
 
 func TestJWT(t *testing.T) {
 	subject := &jwt.Subject{
-		Payload: &jwt.Payload{Sub: "admin", Iss: jwt.JWT, Exp: 3000, Nbf: 0},
+		Payload: &jwt.Payload{Sub: "admin", Iss: jwt.JWT, Exp: jwt.HALF_HOUR, Rxp: jwt.TWO_WEEK, Nbf: 0},
 	}
 	secret := "123456789"
 	result, _ := subject.Generate(secret)
-	fmt.Println(result)
-	if err := subject.Valid(result, secret); err != nil {
+	fmt.Println(result.AccessToken)
+	fmt.Println(result.RefreshToken)
+	fmt.Println(result.AccessTime)
+	if err := subject.Valid(result.AccessToken, secret); err != nil {
 		fmt.Println(err)
+	}
+	result1, err := subject.Refresh(result.AccessToken, result.RefreshToken, secret, result.AccessTime)
+	if err != nil {
+		fmt.Println(err.Error())
+	} else {
+		fmt.Println(result1.AccessToken)
+		fmt.Println(result1.RefreshToken)
+		fmt.Println(result1.AccessTime)
+		if err := subject.Valid(result1.AccessToken, secret); err != nil {
+			fmt.Println(err)
+		}
 	}
 }

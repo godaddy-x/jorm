@@ -6,13 +6,22 @@ import (
 )
 
 const (
-	JWT    = "JWT"
-	SHA256 = "SHA256"
+	JWT          = "JWT"
+	SHA256       = "SHA256"
+	QUARTER_HOUR = int64(900000);
+	HALF_HOUR    = int64(3600000);
+	TWO_WEEK     = int64(1209600000);
 )
 
 type Subject struct {
 	Header  *Header
 	Payload *Payload
+}
+
+type Authorization struct {
+	AccessTime   int64  `json:"accessTime"`   // 授权时间
+	AccessToken  string `json:"accessToken"`  // 授权Token
+	RefreshToken string `json:"refreshToken"` // 续期Token
 }
 
 type Header struct {
@@ -25,25 +34,26 @@ type Payload struct {
 	Sub string            `json:"sub"` // 签发对象
 	Iss string            `json:"iss"` // 签发主体
 	Iat int64             `json:"iat"` // 签发时间
-	Exp int64             `json:"exp"` // 过期时间
+	Exp int64             `json:"exp"` // 授权token过期时间
+	Rxp int64             `json:"rxp"` // 续期token过期时间
 	Nbf int64             `json:"nbf"` // 认证此时间之前不能被接收处理
 	Jti string            `json:"jti"` // 认证唯一标识
 	Ext map[string]string `json:"ext"` // 扩展信息
 }
 
 // 生成Token
-func (self *Subject) Generate(secret string) (string, error) {
+func (self *Subject) Generate(secret string, refresh ...bool) (*Authorization, error) {
 	if len(secret) == 0 {
-		return "", util.Error("secret is nil")
+		return nil, util.Error("secret is nil")
 	}
 	if self.Payload == nil {
-		return "", util.Error("payload is nil")
+		return nil, util.Error("payload is nil")
 	}
 	if len(self.Payload.Sub) == 0 {
-		return "", util.Error("payload.sub is nil")
+		return nil, util.Error("payload.sub is nil")
 	}
 	if len(self.Payload.Iss) == 0 {
-		return "", util.Error("payload.iss is nil")
+		return nil, util.Error("payload.iss is nil")
 	}
 	if self.Payload.Ext == nil {
 		self.Payload.Ext = make(map[string]string, 0)
@@ -51,47 +61,61 @@ func (self *Subject) Generate(secret string) (string, error) {
 	if self.Header == nil {
 		self.Header = &Header{Typ: JWT, Alg: SHA256, Nod: 0}
 	} else if len(self.Header.Typ) == 0 {
-		return "", util.Error("header.typ is nil")
+		return nil, util.Error("header.typ is nil")
 	} else if len(self.Header.Alg) == 0 {
-		return "", util.Error("header.alg is nil")
+		return nil, util.Error("header.alg is nil")
 	}
 	self.Payload.Iat = util.Time()
 	self.Payload.Exp = self.Payload.Iat + self.Payload.Exp
-	self.Payload.Nbf = self.Payload.Iat + self.Payload.Nbf
 	self.Payload.Jti = util.MD5(util.GetUUID(self.Header.Nod))
+	if refresh == nil || len(refresh) == 0 || !refresh[0] {
+		self.Payload.Nbf = self.Payload.Iat + self.Payload.Nbf
+		if self.Payload.Rxp > 0 {
+			if self.Payload.Rxp > TWO_WEEK {
+				self.Payload.Rxp = self.Payload.Iat + TWO_WEEK
+			} else {
+				self.Payload.Rxp = self.Payload.Iat + self.Payload.Rxp
+			}
+		} else {
+			self.Payload.Rxp = self.Payload.Exp
+		}
+	}
 	h_str, err := util.ObjectToJson(self.Header)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	p_str, err := util.ObjectToJson(self.Payload)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	h_str = util.Base64URLEncode(h_str)
 	p_str = util.Base64URLEncode(p_str)
 	if len(h_str) == 0 || len(p_str) == 0 {
-		return "", err
+		return nil, err
 	}
-	return util.AddStr(h_str, ".", p_str, ".", util.SHA256(util.AddStr(h_str, ".", p_str, ".", secret))), nil
+	accessToken := util.AddStr(h_str, ".", p_str, ".", util.SHA256(util.AddStr(h_str, ".", p_str, ".", secret)))
+	accessTime := self.Payload.Iat
+	refreshToken := util.SHA256(util.AddStr(accessToken, ".", util.AnyToStr(accessTime), ".", secret))
+	return &Authorization{AccessToken: accessToken, RefreshToken: refreshToken, AccessTime: accessTime}, nil
 }
 
 // 校验Token
-func (self *Subject) Valid(input, secret string) error {
-	if len(input) == 0 {
-		return util.Error("input is nil")
+func (self *Subject) Valid(accessToken, secret string) error {
+	if len(accessToken) == 0 {
+		return util.Error("accessToken is nil")
 	}
 	if len(secret) == 0 {
 		return util.Error("secret is nil")
 	}
-	sp := strings.Split(input, ".")
+	sp := strings.Split(accessToken, ".")
 	if len(sp) != 3 {
-		return util.Error("token is nil")
+		return util.Error("accessToken is nil")
 	}
 	if len(sp[0]) == 0 || len(sp[1]) == 0 || len(sp[2]) == 0 {
 		return util.Error("message is nil")
 	}
 	if util.SHA256(util.AddStr(sp[0], ".", sp[1], ".", secret)) != sp[2] {
-		return util.Error("token invalid")
+		return util.Error("accessToken invalid")
 	}
 	h_str := util.Base64URLDecode(sp[0])
 	if len(h_str) == 0 {
@@ -125,4 +149,42 @@ func (self *Subject) Valid(input, secret string) error {
 	self.Header = header
 	self.Payload = payload
 	return nil
+}
+
+// 续期Token
+func (self *Subject) Refresh(accessToken, refreshToken, secret string, accessTime int64) (*Authorization, error) {
+	current := util.Time()
+	if accessTime > current {
+		return nil, util.Error("accessTime error")
+	}
+	if current-accessTime < QUARTER_HOUR {
+		return nil, util.Error("it must be more than 15 minutes.")
+	}
+	validRefreshToken := util.SHA256(util.AddStr(accessToken, ".", util.AnyToStr(accessTime), ".", secret))
+	if validRefreshToken != refreshToken {
+		return nil, util.Error("refreshToken invalid")
+	}
+	if err := self.Valid(accessToken, secret); err != nil {
+		return nil, err
+	}
+	if self.Payload.Iat != accessTime {
+		return nil, util.Error("accessTime invalid")
+	}
+	if self.Payload.Rxp < util.Time() {
+		return nil, util.Error("refreshToken expired")
+	}
+	payload := &Payload{
+		Sub: self.Payload.Sub,
+		Iss: self.Payload.Iss,
+		Exp: self.Payload.Exp - self.Payload.Iat,
+		Rxp: self.Payload.Rxp,
+		Nbf: self.Payload.Nbf,
+		Ext: self.Payload.Ext,
+	}
+	subject := &Subject{Header: self.Header, Payload: payload}
+	if rs, err := subject.Generate(secret, true); err != nil {
+		return nil, err
+	} else {
+		return rs, nil
+	}
 }
