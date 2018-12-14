@@ -163,13 +163,19 @@ func (self *Subject) Valid(accessToken, secret string, aud ...string) error {
 }
 
 // 续期Token
-func (self *Subject) Refresh(accessToken, refreshToken, secret string, accessTime int64) (*Authorization, error) {
+func (self *Subject) Refresh(accessToken, refreshToken, secret string, accessTime int64, interval ...int64) (*Authorization, error) {
 	current := util.Time()
 	if accessTime > current {
 		return nil, util.Error("accessTime error")
 	}
-	if current-accessTime < QUARTER_HOUR {
-		return nil, util.Error("it must be more than 15 minutes")
+	if interval == nil || len(interval) == 0 || interval[0] <= 0 {
+		if current-accessTime < QUARTER_HOUR {
+			return nil, util.Error("it must be more than 15 minutes")
+		}
+	} else {
+		if current-accessTime < interval[0] {
+			return nil, util.Error("it must be more than ", util.AnyToStr(interval[0]), " milliseconds")
+		}
 	}
 	validRefreshToken := util.SHA256(util.AddStr(accessToken, ".", util.AnyToStr(accessTime), ".", secret))
 	if validRefreshToken != refreshToken {
