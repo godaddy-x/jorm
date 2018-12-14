@@ -71,13 +71,17 @@ func (self *Subject) Generate(secret string, refresh ...bool) (*Authorization, e
 	} else if len(self.Header.Alg) == 0 {
 		return nil, util.Error("header.alg is nil")
 	}
+	self.Payload.Jti = util.SHA256(util.GetUUID(self.Header.Nod))
 	self.Payload.Iat = util.Time()
-	self.Payload.Exp = self.Payload.Iat + self.Payload.Exp
-	self.Payload.Jti = util.MD5(util.GetUUID(self.Header.Nod))
+	if self.Payload.Exp <= 0 {
+		self.Payload.Exp = self.Payload.Iat + HALF_HOUR
+	} else {
+		self.Payload.Exp = self.Payload.Iat + self.Payload.Exp
+	}
 	if refresh == nil || len(refresh) == 0 || !refresh[0] {
 		self.Payload.Nbf = self.Payload.Iat + self.Payload.Nbf
 		if self.Payload.Rxp > 0 {
-			if self.Payload.Rxp > TWO_WEEK {
+			if self.Payload.Rxp <= 0 || self.Payload.Rxp > TWO_WEEK {
 				self.Payload.Rxp = self.Payload.Iat + TWO_WEEK
 			} else {
 				self.Payload.Rxp = self.Payload.Iat + self.Payload.Rxp
@@ -85,6 +89,15 @@ func (self *Subject) Generate(secret string, refresh ...bool) (*Authorization, e
 		} else {
 			self.Payload.Rxp = self.Payload.Exp
 		}
+		if self.Payload.Exp > self.Payload.Rxp {
+			self.Payload.Exp = self.Payload.Rxp
+		}
+	}
+	if self.Payload.Iat > self.Payload.Exp {
+		return nil, util.Error("the exp must be longer than the iat")
+	}
+	if self.Payload.Iat > self.Payload.Rxp {
+		return nil, util.Error("the rxp must be longer than the iat")
 	}
 	h_str, err := util.ObjectToJson(self.Header)
 	if err != nil {
@@ -170,7 +183,7 @@ func (self *Subject) Refresh(accessToken, refreshToken, secret string, accessTim
 	}
 	if interval == nil || len(interval) == 0 || interval[0] <= 0 {
 		if current-accessTime < QUARTER_HOUR {
-			return nil, util.Error("it must be more than 15 minutes")
+			return nil, util.Error("it must be more than ", util.AnyToStr(QUARTER_HOUR), " milliseconds")
 		}
 	} else {
 		if current-accessTime < interval[0] {
