@@ -119,7 +119,7 @@ func (self *Subject) Generate(secret string, refresh ...bool) (*Authorization, e
 }
 
 // 校验Token
-func (self *Subject) Valid(accessToken, secret string, aud ...string) error {
+func (self *Subject) Valid(accessToken, secret string, refresh bool, aud ...string) error {
 	if len(accessToken) == 0 {
 		return util.Error("accessToken is nil")
 	}
@@ -159,7 +159,10 @@ func (self *Subject) Valid(accessToken, secret string, aud ...string) error {
 	if payload.Nbf > current { // 设置了nbf值,大于当前时间,则校验无效
 		return util.Error("nbf time invalid")
 	}
-	if payload.Exp < current {
+	if refresh && payload.Rxp < current {
+		return util.Error("rxp time invalid")
+	}
+	if !refresh && payload.Exp < current {
 		return util.Error("exp time invalid")
 	}
 	if len(payload.Sub) == 0 {
@@ -194,7 +197,7 @@ func (self *Subject) Refresh(accessToken, refreshToken, secret string, accessTim
 	if validRefreshToken != refreshToken {
 		return nil, util.Error("refreshToken invalid")
 	}
-	if err := self.Valid(accessToken, secret); err != nil {
+	if err := self.Valid(accessToken, secret, true); err != nil {
 		return nil, err
 	}
 	if self.Payload.Iat != accessTime {
