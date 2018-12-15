@@ -289,17 +289,20 @@ func (self *RDBManager) Save(data interface{}) error {
 	sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
 	sqlbuf.WriteString(")")
 	defer self.debug("Save", sqlbuf.String(), valuePart, start)
+	var stmt *sql.Stmt
 	var ret sql.Result
 	if self.AutoTx {
-		ret, err = self.Tx.Exec(sqlbuf.String(), valuePart...)
-		if err != nil {
-			return self.Error(util.AddStr("保存数据失败: ", err.Error()))
-		}
+		stmt, err = self.Tx.Prepare(sqlbuf.String())
 	} else {
-		ret, err = self.Db.Exec(sqlbuf.String(), valuePart...)
-		if err != nil {
-			return self.Error(util.AddStr("保存数据失败: ", err.Error()))
-		}
+		stmt, err = self.Db.Prepare(sqlbuf.String())
+	}
+	if err != nil {
+		return self.Error(util.AddStr("预编译sql[", sqlbuf.String(), "]失败: ", err.Error()))
+	}
+	defer stmt.Close()
+	ret, err = stmt.Exec(valuePart...)
+	if err != nil {
+		return self.Error(util.AddStr("保存数据失败: ", err.Error()))
 	}
 	if rowsAffected, err := ret.RowsAffected(); err != nil {
 		return self.Error(util.AddStr("保存数据失败: ", err.Error()))
@@ -400,14 +403,18 @@ func (self *RDBManager) Update(data interface{}) error {
 	sqlbuf.WriteString(" where ")
 	sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
 	defer self.debug("Update", sqlbuf.String(), valuePart, start)
+	var stmt *sql.Stmt
 	if self.AutoTx {
-		if _, err := self.Tx.Exec(sqlbuf.String(), valuePart...); err != nil {
-			return self.Error(util.AddStr("更新数据失败: ", err.Error()))
-		}
+		stmt, err = self.Tx.Prepare(sqlbuf.String())
 	} else {
-		if _, err := self.Db.Exec(sqlbuf.String(), valuePart...); err != nil {
-			return self.Error(util.AddStr("更新数据失败: ", err.Error()))
-		}
+		stmt, err = self.Db.Prepare(sqlbuf.String())
+	}
+	if err != nil {
+		return self.Error(util.AddStr("预编译sql[", sqlbuf.String(), "]失败: ", err.Error()))
+	}
+	defer stmt.Close()
+	if _, err := stmt.Exec(valuePart...); err != nil {
+		return self.Error(util.AddStr("更新数据失败: ", err.Error()))
 	}
 	return self.AddCacheSync(data)
 }
