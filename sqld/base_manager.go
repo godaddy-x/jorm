@@ -28,10 +28,14 @@ type DBConfig struct {
 	Debug     bool   // debug模式
 	CacheSync bool   // 是否缓存数据
 	DsName    string // 数据源名称
+	Node      int    // 节点
+	AutoID    bool   // 自主ID模式
 }
 
 // 数据选项
 type Option struct {
+	Node         int          // 节点
+	AutoID       bool         // 自主ID模式
 	AutoTx       bool         // 是否自动事务提交 false.否 true.是
 	DsName       string       // 数据源,分库时使用
 	CacheSync    bool         // 是否数据缓存,比如redis,mongo等
@@ -232,7 +236,19 @@ func (self *RDBManager) Save(data interface{}) error {
 			continue
 		}
 		if field.Name == sqlc.Id {
-			idValue = value
+			if self.AutoID {
+				fieldPart1.WriteString(field.Tag.Get(sqlc.Json))
+				fieldPart1.WriteString(",")
+				fieldPart2.WriteString("?,")
+				if valueID, err := util.StrToInt64(util.GetUUID(int64(self.Node))); err != nil {
+					return err
+				} else {
+					valuePart = append(valuePart, valueID)
+					value.SetInt(valueID)
+				}
+			} else {
+				idValue = value
+			}
 			continue
 		}
 		kind := value.Kind()
@@ -309,11 +325,13 @@ func (self *RDBManager) Save(data interface{}) error {
 	} else if rowsAffected <= 0 {
 		return self.Error(util.AddStr("保存数据失败: 受影响行数 -> ", util.AnyToStr(rowsAffected)))
 	}
-	if lastInsertId, err := ret.LastInsertId(); err != nil {
-		return self.Error(util.AddStr("保存数据失败: ", err.Error()))
-	} else {
-		if lastInsertId > 0 {
-			idValue.SetInt(lastInsertId)
+	if !self.AutoID {
+		if lastInsertId, err := ret.LastInsertId(); err != nil {
+			return self.Error(util.AddStr("保存数据失败: ", err.Error()))
+		} else {
+			if lastInsertId > 0 {
+				idValue.SetInt(lastInsertId)
+			}
 		}
 	}
 	return self.AddCacheSync(data)
