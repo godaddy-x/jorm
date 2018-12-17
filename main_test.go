@@ -18,12 +18,6 @@ type User struct {
 	Utype    int8   `json:"utype" bson:"utype"`
 }
 
-type MGUser struct {
-	Id    int64  `json:"id" bson:"_id" tb:"rbac_user" mg:"true" ignore:"true"`
-	Name  string `json:"name" bson:"name"`
-	Ctime int64  `json:"ctime" bson:"ctime" date:"true"`
-}
-
 type OwWallet struct {
 	Id           int64  `json:"id" bson:"_id" tb:"ow_wallet" mg:"true"`
 	AppID        string `json:"appID" bson:"appID"`
@@ -77,16 +71,21 @@ func TestMysql(t *testing.T) {
 		fmt.Print(err.Error())
 	} else {
 		defer db.Close()
-		//wallet := MGUser{Name: "test", Ctime: util.Time()}
+		//wallet := OwWallet{WalletID: util.GetUUID(), Ctime: util.Time()}
 		//if err := db.Save(&wallet); err != nil {
 		//	fmt.Println(err.Error())
 		//}
 		//fmt.Println(wallet)
-		find := []*MGUser{}
-		if err := db.FindList(sqlc.M(MGUser{}).Eq("name", "test"), &find); err != nil {
-			fmt.Println(err.Error())
+		find := []*OwWallet{}
+		if err := db.FindList(sqlc.M(OwWallet{}).Eq("walletID", "test").Limit(1, 10), &find); err != nil {
+			panic(err)
 		}
 		fmt.Println(len(find))
+		if c, err := db.Count(sqlc.M(OwWallet{})); err != nil {
+			panic(err)
+		} else {
+			fmt.Println("count: ", c)
+		}
 	}
 }
 
@@ -130,7 +129,7 @@ func TestJWT(t *testing.T) {
 	fmt.Println(result.AccessToken)
 	fmt.Println(result.RefreshToken)
 	fmt.Println(result.AccessTime)
-	if err := subject.Valid(result.AccessToken, secret); err != nil {
+	if err := subject.Valid(result.AccessToken, secret, false); err != nil {
 		fmt.Println(err)
 	}
 	result1, err := subject.Refresh(result.AccessToken, result.RefreshToken, secret, result.AccessTime)
@@ -140,7 +139,7 @@ func TestJWT(t *testing.T) {
 		fmt.Println(result1.AccessToken)
 		fmt.Println(result1.RefreshToken)
 		fmt.Println(result1.AccessTime)
-		if err := subject.Valid(result1.AccessToken, secret); err != nil {
+		if err := subject.Valid(result1.AccessToken, secret, false); err != nil {
 			fmt.Println(err)
 		}
 	}

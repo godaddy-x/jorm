@@ -474,12 +474,17 @@ func (self *RDBManager) Count(cnd *sqlc.Cnd) (int64, error) {
 	sqlbuf.WriteString(" ")
 	sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
 	defer self.debug("Count", sqlbuf.String(), valuePart, start)
-	var rows *sql.Rows
+	var stmt *sql.Stmt
 	if self.AutoTx {
-		rows, err = self.Tx.Query(sqlbuf.String(), valuePart...)
+		stmt, err = self.Tx.Prepare(sqlbuf.String())
 	} else {
-		rows, err = self.Db.Query(sqlbuf.String(), valuePart...)
+		stmt, err = self.Db.Prepare(sqlbuf.String())
 	}
+	if err != nil {
+		return 0, self.Error(util.AddStr("预编译sql[", sqlbuf.String(), "]失败: ", err.Error()))
+	}
+	defer stmt.Close()
+	rows, err := stmt.Query(valuePart...)
 	if rows != nil {
 		defer rows.Close()
 	}
@@ -564,12 +569,17 @@ func (self *RDBManager) FindById(data interface{}) error {
 	sqlbuf.WriteString(" ")
 	sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
 	defer self.debug("FindById", sqlbuf.String(), valuePart, start)
-	var rows *sql.Rows
+	var stmt *sql.Stmt
 	if self.AutoTx {
-		rows, err = self.Tx.Query(sqlbuf.String(), valuePart...)
+		stmt, err = self.Tx.Prepare(sqlbuf.String())
 	} else {
-		rows, err = self.Db.Query(sqlbuf.String(), valuePart...)
+		stmt, err = self.Db.Prepare(sqlbuf.String())
 	}
+	if err != nil {
+		return self.Error(util.AddStr("预编译sql[", sqlbuf.String(), "]失败: ", err.Error()))
+	}
+	defer stmt.Close()
+	rows, err := stmt.Query(valuePart...)
 	if rows != nil {
 		defer rows.Close()
 	}
@@ -688,12 +698,17 @@ func (self *RDBManager) FindOne(cnd *sqlc.Cnd, data interface{}) error {
 		return self.Error(err)
 	}
 	defer self.debug("FindOne", sqlbuf.String(), valuePart, start)
-	var rows *sql.Rows
+	var stmt *sql.Stmt
 	if self.AutoTx {
-		rows, err = self.Tx.Query(limitSql, valuePart...)
+		stmt, err = self.Tx.Prepare(limitSql)
 	} else {
-		rows, err = self.Db.Query(limitSql, valuePart...)
+		stmt, err = self.Db.Prepare(limitSql)
 	}
+	if err != nil {
+		return self.Error(util.AddStr("预编译sql[", sqlbuf.String(), "]失败: ", err.Error()))
+	}
+	defer stmt.Close()
+	rows, err := stmt.Query(valuePart...)
 	if rows != nil {
 		defer rows.Close()
 	}
@@ -813,12 +828,17 @@ func (self *RDBManager) FindList(cnd *sqlc.Cnd, data interface{}) error {
 		return self.Error(err)
 	}
 	defer self.debug("FindList", sqlbuf.String(), valuePart, start)
-	var rows *sql.Rows
+	var stmt *sql.Stmt
 	if self.AutoTx {
-		rows, err = self.Tx.Query(limitSql, valuePart...)
+		stmt, err = self.Tx.Prepare(limitSql)
 	} else {
-		rows, err = self.Db.Query(limitSql, valuePart...)
+		stmt, err = self.Db.Prepare(limitSql)
 	}
+	if err != nil {
+		return self.Error(util.AddStr("预编译sql[", sqlbuf.String(), "]失败: ", err.Error()))
+	}
+	defer stmt.Close()
+	rows, err := stmt.Query(valuePart...)
 	if rows != nil {
 		defer rows.Close()
 	}
@@ -939,12 +959,17 @@ func (self *RDBManager) FindComplex(cnd *sqlc.Cnd, data interface{}) error {
 		return self.Error(err)
 	}
 	defer self.debug("FindComplex", sqlbuf.String(), valuePart, start)
-	var rows *sql.Rows
+	var stmt *sql.Stmt
 	if self.AutoTx {
-		rows, err = self.Tx.Query(limitSql, valuePart...)
+		stmt, err = self.Tx.Prepare(limitSql)
 	} else {
-		rows, err = self.Db.Query(limitSql, valuePart...)
+		stmt, err = self.Db.Prepare(limitSql)
 	}
+	if err != nil {
+		return self.Error(util.AddStr("预编译sql[", sqlbuf.String(), "]失败: ", err.Error()))
+	}
+	defer stmt.Close()
+	rows, err := stmt.Query(valuePart...)
 	if rows != nil {
 		defer rows.Close()
 	}
