@@ -143,6 +143,9 @@ func (self *MGOManager) buildByConfig(manager cache.ICache, input ...MGOConfig) 
 
 // 保存或更新数据到mongo集合
 func (self *MGOManager) Save(datas ...interface{}) error {
+	if datas == nil || len(datas) == 0 {
+		return util.Error("参数不能为空")
+	}
 	for e := range datas {
 		start := util.Time()
 		data := datas[e]
@@ -185,27 +188,33 @@ func (self *MGOManager) Save(datas ...interface{}) error {
 }
 
 // 保存或更新数据到mongo集合
-func (self *MGOManager) Update(data interface{}) error {
-	return self.Save(data)
+func (self *MGOManager) Update(datas ...interface{}) error {
+	return self.Save(datas...)
 }
 
-func (self *MGOManager) Delete(data interface{}) error {
-	start := util.Time()
-	if data == nil {
-		return util.Error("数据实体为空")
+func (self *MGOManager) Delete(datas ...interface{}) error {
+	if datas == nil || len(datas) == 0 {
+		return util.Error("参数不能为空")
 	}
-	if reflect.ValueOf(data).Kind() != reflect.Ptr {
-		return self.Error("参数值必须为指针类型")
-	}
-	copySession := self.Session.Copy()
-	defer copySession.Close()
-	db, err := self.GetDatabase(copySession, data)
-	if err != nil {
-		return err
-	}
-	defer self.debug("Delete", data, start)
-	if err := db.RemoveId(util.GetDataID(data)); err != nil {
-		return util.Error("删除数据ID失败")
+	for e := range datas {
+		data := datas[e]
+		start := util.Time()
+		if data == nil {
+			return util.Error("数据实体为空")
+		}
+		if reflect.ValueOf(data).Kind() != reflect.Ptr {
+			return self.Error("参数值必须为指针类型")
+		}
+		copySession := self.Session.Copy()
+		defer copySession.Close()
+		db, err := self.GetDatabase(copySession, data)
+		if err != nil {
+			return err
+		}
+		defer self.debug("Delete", data, start)
+		if err := db.RemoveId(util.GetDataID(data)); err != nil {
+			return util.Error("删除数据ID失败")
+		}
 	}
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/godaddy-x/jorm/cache/redis"
 	"github.com/godaddy-x/jorm/jwt"
+	"github.com/godaddy-x/jorm/sqlc"
 	"github.com/godaddy-x/jorm/sqld"
 	"github.com/godaddy-x/jorm/util"
 	"testing"
@@ -77,16 +78,16 @@ func TestMysql(t *testing.T) {
 			fmt.Println(err.Error())
 		}
 		fmt.Println(wallet)
-		//find := []*OwWallet{}
-		//if err := db.FindList(sqlc.M(OwWallet{}).Eq("walletID", "test").Limit(1, 10), &find); err != nil {
-		//	panic(err)
-		//}
-		//fmt.Println(len(find))
-		//if c, err := db.Count(sqlc.M(OwWallet{})); err != nil {
-		//	panic(err)
-		//} else {
-		//	fmt.Println("count: ", c)
-		//}
+		find := []*OwWallet{}
+		if err := db.FindList(sqlc.M(OwWallet{}).Eq("walletID", "test").Limit(1, 10), &find); err != nil {
+			panic(err)
+		}
+		fmt.Println(len(find))
+		if c, err := db.Count(sqlc.M(OwWallet{})); err != nil {
+			panic(err)
+		} else {
+			fmt.Println("count: ", c)
+		}
 	}
 }
 

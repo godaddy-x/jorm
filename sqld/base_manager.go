@@ -62,9 +62,9 @@ type IDBase interface {
 	// 保存数据
 	Save(datas ...interface{}) error
 	// 更新数据
-	Update(data interface{}) error
+	Update(datas ...interface{}) error
 	// 删除数据
-	Delete(data interface{}) error
+	Delete(datas ...interface{}) error
 	// 统计数据
 	Count(cnd *sqlc.Cnd) (int64, error)
 	// 按ID查询单条数据
@@ -101,11 +101,11 @@ func (self *DBManager) Save(datas ...interface{}) error {
 	return util.Error("No implementation method [Save] was found")
 }
 
-func (self *DBManager) Update(data interface{}) error {
+func (self *DBManager) Update(datas ...interface{}) error {
 	return util.Error("No implementation method [Update] was found")
 }
 
-func (self *DBManager) Delete(data interface{}) error {
+func (self *DBManager) Delete(datas ...interface{}) error {
 	return util.Error("No implementation method [Delete] was found")
 }
 
@@ -213,6 +213,9 @@ func (self *RDBManager) GetDB(option ...Option) error {
 }
 
 func (self *RDBManager) Save(datas ...interface{}) error {
+	if datas == nil || len(datas) == 0 {
+		return util.Error("参数不能为空")
+	}
 	var stmt *sql.Stmt
 	var svsql string
 	for e := range datas {
@@ -223,10 +226,6 @@ func (self *RDBManager) Save(datas ...interface{}) error {
 		}
 		if reflect.ValueOf(data).Kind() != reflect.Ptr {
 			return self.Error("参数值必须为指针类型")
-		}
-		tb, err := util.GetDbAndTb(data)
-		if err != nil {
-			return self.Error(err)
 		}
 		var fieldPart1, fieldPart2 bytes.Buffer
 		var valuePart = make([]interface{}, 0)
@@ -301,7 +300,11 @@ func (self *RDBManager) Save(datas ...interface{}) error {
 		s2 := fieldPart2.String()
 		var sqlbuf bytes.Buffer
 		sqlbuf.WriteString("insert into ")
-		sqlbuf.WriteString(tb)
+		if tb, err := util.GetDbAndTb(data); err != nil {
+			return self.Error(err)
+		} else {
+			sqlbuf.WriteString(tb)
+		}
 		sqlbuf.WriteString(" (")
 		sqlbuf.WriteString(util.Substr(s1, 0, len(s1)-1))
 		sqlbuf.WriteString(")")
@@ -310,6 +313,7 @@ func (self *RDBManager) Save(datas ...interface{}) error {
 		sqlbuf.WriteString(")")
 		if len(svsql) == 0 {
 			svsql = sqlbuf.String()
+			var err error
 			defer self.debug("Save", svsql, valuePart, start)
 			if self.AutoTx {
 				stmt, err = self.Tx.Prepare(svsql)
@@ -343,107 +347,114 @@ func (self *RDBManager) Save(datas ...interface{}) error {
 	return self.AddCacheSync(datas...)
 }
 
-func (self *RDBManager) Update(data interface{}) error {
-	start := util.Time()
-	if data == nil {
-		return self.Error("参数不能为空")
+func (self *RDBManager) Update(datas ...interface{}) error {
+	if datas == nil || len(datas) == 0 {
+		return util.Error("参数不能为空")
 	}
-	if reflect.ValueOf(data).Kind() != reflect.Ptr {
-		return self.Error("参数值必须为指针类型")
-	}
-	tb, err := util.GetDbAndTb(data)
-	if err != nil {
-		return self.Error(err)
-	}
-	var fieldPart1, fieldPart2 bytes.Buffer
-	var valuePart = make([]interface{}, 0)
-	var idValue reflect.Value
-	tof := reflect.TypeOf(data).Elem()
-	vof := reflect.ValueOf(data).Elem()
-	for i := 0; i < tof.NumField(); i++ {
-		field := tof.Field(i)
-		value := vof.Field(i)
-		if util.ValidIgnore(field) {
-			continue
+	for e := range datas {
+		data := datas[e]
+		start := util.Time()
+		if data == nil {
+			return self.Error("参数不能为空")
 		}
-		if field.Name == sqlc.Id {
-			if value.Kind() != reflect.Int64 {
-				return self.Error("实体ID必须为int64类型")
-			}
-			idValue = value
-			fieldPart2.WriteString("id = ?,")
-			continue
+		if reflect.ValueOf(data).Kind() != reflect.Ptr {
+			return self.Error("参数值必须为指针类型")
 		}
-		kind := value.Kind()
-		if kind == reflect.String {
-			valuePart = append(valuePart, value.String())
-		} else if kind == reflect.Int || kind == reflect.Int8 || kind == reflect.Int16 || kind == reflect.Int32 || kind == reflect.Int64 {
-			rt := value.Int()
-			if kind == reflect.Int64 && rt > 0 && util.ValidDate(field) {
-				valuePart = append(valuePart, util.Time2Str(rt))
-			} else {
-				valuePart = append(valuePart, rt)
+		var fieldPart1, fieldPart2 bytes.Buffer
+		var valuePart = make([]interface{}, 0)
+		var idValue reflect.Value
+		tof := reflect.TypeOf(data).Elem()
+		vof := reflect.ValueOf(data).Elem()
+		for i := 0; i < tof.NumField(); i++ {
+			field := tof.Field(i)
+			value := vof.Field(i)
+			if util.ValidIgnore(field) {
+				continue
 			}
-		} else if !value.IsNil() && kind == reflect.Slice {
-			if str, err := util.ObjectToJson(value.Interface()); err != nil {
-				return self.Error(util.AddStr("字段[", field.Name, "]转换失败: ", err.Error()))
-			} else {
-				valuePart = append(valuePart, str)
+			if field.Name == sqlc.Id {
+				if value.Kind() != reflect.Int64 {
+					return self.Error("实体ID必须为int64类型")
+				}
+				idValue = value
+				fieldPart2.WriteString("id = ?,")
+				continue
 			}
-		} else if !value.IsNil() && kind == reflect.Map {
-			if str, err := util.ObjectToJson(value.Interface()); err != nil {
-				return self.Error(util.AddStr("字段[", field.Name, "]转换失败: ", err.Error()))
+			kind := value.Kind()
+			if kind == reflect.String {
+				valuePart = append(valuePart, value.String())
+			} else if kind == reflect.Int || kind == reflect.Int8 || kind == reflect.Int16 || kind == reflect.Int32 || kind == reflect.Int64 {
+				rt := value.Int()
+				if kind == reflect.Int64 && rt > 0 && util.ValidDate(field) {
+					valuePart = append(valuePart, util.Time2Str(rt))
+				} else {
+					valuePart = append(valuePart, rt)
+				}
+			} else if !value.IsNil() && kind == reflect.Slice {
+				if str, err := util.ObjectToJson(value.Interface()); err != nil {
+					return self.Error(util.AddStr("字段[", field.Name, "]转换失败: ", err.Error()))
+				} else {
+					valuePart = append(valuePart, str)
+				}
+			} else if !value.IsNil() && kind == reflect.Map {
+				if str, err := util.ObjectToJson(value.Interface()); err != nil {
+					return self.Error(util.AddStr("字段[", field.Name, "]转换失败: ", err.Error()))
+				} else {
+					valuePart = append(valuePart, str)
+				}
+			} else if !value.IsNil() && kind == reflect.Slice {
+				if str, err := util.ObjectToJson(value.Interface()); err != nil {
+					return self.Error(util.AddStr("字段[", field.Name, "]转换失败: ", err.Error()))
+				} else {
+					valuePart = append(valuePart, str)
+				}
+			} else if value.IsNil() {
+				continue
 			} else {
-				valuePart = append(valuePart, str)
+				str, err := util.ObjectToJson(value.Interface());
+				if err != nil {
+					fmt.Println("字段输出json失败: " + value.String())
+				}
+				fmt.Println(util.AddStr("警告: 不支持的字段[", field.Name, "]类型[", kind.String(), "] --- ", str))
+				continue
 			}
-		} else if !value.IsNil() && kind == reflect.Slice {
-			if str, err := util.ObjectToJson(value.Interface()); err != nil {
-				return self.Error(util.AddStr("字段[", field.Name, "]转换失败: ", err.Error()))
-			} else {
-				valuePart = append(valuePart, str)
-			}
-		} else if value.IsNil() {
-			continue
+			fieldPart1.WriteString(" ")
+			fieldPart1.WriteString(field.Tag.Get(sqlc.Bson))
+			fieldPart1.WriteString(" = ?,")
+		}
+		valuePart = append(valuePart, idValue.Int())
+		s1 := fieldPart1.String()
+		s2 := fieldPart2.String()
+		var sqlbuf bytes.Buffer
+		sqlbuf.WriteString("update ")
+		if tb, err := util.GetDbAndTb(data); err != nil {
+			return self.Error(err)
 		} else {
-			str, err := util.ObjectToJson(value.Interface());
-			if err != nil {
-				fmt.Println("字段输出json失败: " + value.String())
-			}
-			fmt.Println(util.AddStr("警告: 不支持的字段[", field.Name, "]类型[", kind.String(), "] --- ", str))
-			continue
+			sqlbuf.WriteString(tb)
 		}
-		fieldPart1.WriteString(" ")
-		fieldPart1.WriteString(field.Tag.Get(sqlc.Bson))
-		fieldPart1.WriteString(" = ?,")
+		sqlbuf.WriteString(" set")
+		sqlbuf.WriteString(util.Substr(s1, 0, len(s1)-1))
+		sqlbuf.WriteString(" where ")
+		sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
+		defer self.debug("Update", sqlbuf.String(), valuePart, start)
+		var stmt *sql.Stmt
+		var err error
+		if self.AutoTx {
+			stmt, err = self.Tx.Prepare(sqlbuf.String())
+		} else {
+			stmt, err = self.Db.Prepare(sqlbuf.String())
+		}
+		if err != nil {
+			return self.Error(util.AddStr("预编译sql[", sqlbuf.String(), "]失败: ", err.Error()))
+		}
+		defer stmt.Close()
+		if _, err := stmt.Exec(valuePart...); err != nil {
+			return self.Error(util.AddStr("更新数据失败: ", err.Error()))
+		}
 	}
-	valuePart = append(valuePart, idValue.Int())
-	s1 := fieldPart1.String()
-	s2 := fieldPart2.String()
-	var sqlbuf bytes.Buffer
-	sqlbuf.WriteString("update ")
-	sqlbuf.WriteString(tb)
-	sqlbuf.WriteString(" set")
-	sqlbuf.WriteString(util.Substr(s1, 0, len(s1)-1))
-	sqlbuf.WriteString(" where ")
-	sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
-	defer self.debug("Update", sqlbuf.String(), valuePart, start)
-	var stmt *sql.Stmt
-	if self.AutoTx {
-		stmt, err = self.Tx.Prepare(sqlbuf.String())
-	} else {
-		stmt, err = self.Db.Prepare(sqlbuf.String())
-	}
-	if err != nil {
-		return self.Error(util.AddStr("预编译sql[", sqlbuf.String(), "]失败: ", err.Error()))
-	}
-	defer stmt.Close()
-	if _, err := stmt.Exec(valuePart...); err != nil {
-		return self.Error(util.AddStr("更新数据失败: ", err.Error()))
-	}
-	return self.AddCacheSync(data)
+	return self.AddCacheSync(datas...)
 }
 
-func (self *RDBManager) Delete(data interface{}) error {
+func (self *RDBManager) Delete(datas ...interface{}) error {
 	return util.Error("No implementation method [Delete] was found")
 }
 
@@ -453,10 +464,6 @@ func (self *RDBManager) Count(cnd *sqlc.Cnd) (int64, error) {
 	var elem = cnd.Model
 	if elem == nil {
 		return 0, self.Error("ORM对象类型不能为空,请通过M(...)方法设置对象类型")
-	}
-	tb, err := util.GetDbAndTb(elem)
-	if err != nil {
-		return 0, self.Error(err)
 	}
 	var fieldPart1, fieldPart2 bytes.Buffer
 	var valuePart = make([]interface{}, 0)
@@ -476,11 +483,16 @@ func (self *RDBManager) Count(cnd *sqlc.Cnd) (int64, error) {
 	sqlbuf.WriteString("select ")
 	sqlbuf.WriteString(s1)
 	sqlbuf.WriteString(" from ")
-	sqlbuf.WriteString(tb)
+	if tb, err := util.GetDbAndTb(elem); err != nil {
+		return 0, self.Error(err)
+	} else {
+		sqlbuf.WriteString(tb)
+	}
 	sqlbuf.WriteString(" ")
 	sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
 	defer self.debug("Count", sqlbuf.String(), valuePart, start)
 	var stmt *sql.Stmt
+	var err error
 	if self.AutoTx {
 		stmt, err = self.Tx.Prepare(sqlbuf.String())
 	} else {
@@ -533,10 +545,6 @@ func (self *RDBManager) FindById(data interface{}) error {
 	var fieldPart1, fieldPart2 bytes.Buffer
 	var valuePart = make([]interface{}, 0)
 	var fieldArray []reflect.StructField
-	tb, err := util.GetDbAndTb(data)
-	if err != nil {
-		return self.Error(err)
-	}
 	if vid := util.GetDataID(data); vid <= 0 {
 		return self.Error("对象ID值不能为空")
 	} else {
@@ -571,11 +579,16 @@ func (self *RDBManager) FindById(data interface{}) error {
 	sqlbuf.WriteString("select ")
 	sqlbuf.WriteString(util.Substr(s1, 0, len(s1)-1))
 	sqlbuf.WriteString(" from ")
-	sqlbuf.WriteString(tb)
+	if tb, err := util.GetDbAndTb(data); err != nil {
+		return self.Error(err)
+	} else {
+		sqlbuf.WriteString(tb)
+	}
 	sqlbuf.WriteString(" ")
 	sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
 	defer self.debug("FindById", sqlbuf.String(), valuePart, start)
 	var stmt *sql.Stmt
+	var err error
 	if self.AutoTx {
 		stmt, err = self.Tx.Prepare(sqlbuf.String())
 	} else {
@@ -626,10 +639,6 @@ func (self *RDBManager) FindOne(cnd *sqlc.Cnd, data interface{}) error {
 	var elem = cnd.Model
 	if elem == nil {
 		return self.Error("ORM对象类型不能为空,请通过M(...)方法设置对象类型")
-	}
-	tb, err := util.GetDbAndTb(elem)
-	if err != nil {
-		return self.Error(err)
 	}
 	if util.TypeOf(data).Kind() != reflect.Struct {
 		return self.Error("返回结果必须为struct类型")
@@ -691,7 +700,11 @@ func (self *RDBManager) FindOne(cnd *sqlc.Cnd, data interface{}) error {
 	sqlbuf.WriteString("select ")
 	sqlbuf.WriteString(util.Substr(s1, 0, len(s1)-1))
 	sqlbuf.WriteString(" from ")
-	sqlbuf.WriteString(tb)
+	if tb, err := util.GetDbAndTb(elem); err != nil {
+		return self.Error(err)
+	} else {
+		sqlbuf.WriteString(tb)
+	}
 	sqlbuf.WriteString(" ")
 	sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
 	sortby := self.BuilSortBy(cnd)
@@ -758,10 +771,6 @@ func (self *RDBManager) FindList(cnd *sqlc.Cnd, data interface{}) error {
 	if elem == nil {
 		return self.Error("ORM对象类型不能为空,请通过M(...)方法设置对象类型")
 	}
-	tb, err := util.GetDbAndTb(elem)
-	if err != nil {
-		return self.Error(err)
-	}
 	if util.TypeOf(data).Kind() != reflect.Slice {
 		return self.Error("返回结果必须为数组类型")
 	}
@@ -822,7 +831,11 @@ func (self *RDBManager) FindList(cnd *sqlc.Cnd, data interface{}) error {
 	sqlbuf.WriteString("select ")
 	sqlbuf.WriteString(util.Substr(s1, 0, len(s1)-1))
 	sqlbuf.WriteString(" from ")
-	sqlbuf.WriteString(tb)
+	if tb, err := util.GetDbAndTb(elem); err != nil {
+		return self.Error(err)
+	} else {
+		sqlbuf.WriteString(tb)
+	}
 	sqlbuf.WriteString(" ")
 	sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
 	sortby := self.BuilSortBy(cnd)
