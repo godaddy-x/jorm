@@ -142,41 +142,44 @@ func (self *MGOManager) buildByConfig(manager cache.ICache, input ...MGOConfig) 
 }
 
 // 保存或更新数据到mongo集合
-func (self *MGOManager) Save(data interface{}) error {
-	start := util.Time()
-	if data == nil {
-		return util.Error("数据实体为空")
-	}
-	if reflect.ValueOf(data).Kind() != reflect.Ptr {
-		return self.Error("参数值必须为指针类型")
-	}
-	objectId := util.GetDataID(data)
-	if objectId == 0 {
-		v := reflect.ValueOf(data).Elem()
-		uuid, _ := util.StrToInt64(util.GetUUID())
-		v.FieldByName("Id").Set(reflect.ValueOf(uuid))
-	}
-	copySession := self.Session.Copy()
-	defer copySession.Close()
-	db, err := self.GetDatabase(copySession, data)
-	if err != nil {
-		return err
-	}
-	defer self.debug("Save/Update", data, start)
-	newObject := util.NewInstance(data)
-	err = db.FindId(objectId).One(newObject)
-	if err == nil { // 更新数据
-		err = db.UpdateId(objectId, data)
-		if err != nil {
-			return util.Error("mongo更新数据失败: ", err.Error())
+func (self *MGOManager) Save(datas ...interface{}) error {
+	for e := range datas {
+		start := util.Time()
+		data := datas[e]
+		if data == nil {
+			return util.Error("数据实体为空")
 		}
-		return nil
-	} else { // 新增数据
-		err = db.Insert(data)
-		if err != nil {
-			return util.Error("mongo保存数据失败: ", err.Error())
+		if reflect.ValueOf(data).Kind() != reflect.Ptr {
+			return self.Error("参数值必须为指针类型")
 		}
-		return nil
+		objectId := util.GetDataID(data)
+		if objectId == 0 {
+			v := reflect.ValueOf(data).Elem()
+			uuid, _ := util.StrToInt64(util.GetUUID())
+			v.FieldByName("Id").Set(reflect.ValueOf(uuid))
+		}
+		copySession := self.Session.Copy()
+		defer copySession.Close()
+		db, err := self.GetDatabase(copySession, data)
+		if err != nil {
+			return err
+		}
+		defer self.debug("Save/Update", data, start)
+		newObject := util.NewInstance(data)
+		err = db.FindId(objectId).One(newObject)
+		if err == nil { // 更新数据
+			err = db.UpdateId(objectId, data)
+			if err != nil {
+				return util.Error("mongo更新数据失败: ", err.Error())
+			}
+			return nil
+		} else { // 新增数据
+			err = db.Insert(data)
+			if err != nil {
+				return util.Error("mongo保存数据失败: ", err.Error())
+			}
+			return nil
+		}
 	}
 	return nil
 }

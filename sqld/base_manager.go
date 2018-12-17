@@ -60,7 +60,7 @@ type IDBase interface {
 	// 获取数据库管理器
 	GetDB(option ...Option) error
 	// 保存数据
-	Save(data interface{}) error
+	Save(datas ...interface{}) error
 	// 更新数据
 	Update(data interface{}) error
 	// 删除数据
@@ -97,7 +97,7 @@ func (self *DBManager) GetDB(option ...Option) error {
 	return util.Error("No implementation method [GetDB] was found")
 }
 
-func (self *DBManager) Save(data interface{}) error {
+func (self *DBManager) Save(datas ...interface{}) error {
 	return util.Error("No implementation method [Save] was found")
 }
 
@@ -212,129 +212,135 @@ func (self *RDBManager) GetDB(option ...Option) error {
 	return nil
 }
 
-func (self *RDBManager) Save(data interface{}) error {
-	start := util.Time()
-	if data == nil {
-		return self.Error("参数不能为空")
-	}
-	if reflect.ValueOf(data).Kind() != reflect.Ptr {
-		return self.Error("参数值必须为指针类型")
-	}
-	tb, err := util.GetDbAndTb(data)
-	if err != nil {
-		return self.Error(err)
-	}
-	var fieldPart1, fieldPart2 bytes.Buffer
-	var valuePart = make([]interface{}, 0)
-	var idValue reflect.Value
-	tof := reflect.TypeOf(data).Elem()
-	vof := reflect.ValueOf(data).Elem()
-	for i := 0; i < tof.NumField(); i++ {
-		field := tof.Field(i)
-		value := vof.Field(i)
-		if util.ValidIgnore(field) {
-			continue
-		}
-		if field.Name == sqlc.Id {
-			if self.AutoID {
-				fieldPart1.WriteString(field.Tag.Get(sqlc.Json))
-				fieldPart1.WriteString(",")
-				fieldPart2.WriteString("?,")
-				if valueID, err := util.StrToInt64(util.GetUUID(int64(self.Node))); err != nil {
-					return err
-				} else {
-					valuePart = append(valuePart, valueID)
-					value.SetInt(valueID)
-				}
-			} else {
-				idValue = value
-			}
-			continue
-		}
-		kind := value.Kind()
-		if kind == reflect.String {
-			valuePart = append(valuePart, value.String())
-		} else if kind == reflect.Int || kind == reflect.Int8 || kind == reflect.Int16 || kind == reflect.Int32 || kind == reflect.Int64 {
-			rt := value.Int()
-			if kind == reflect.Int64 && rt > 0 && util.ValidDate(field) {
-				valuePart = append(valuePart, util.Time2Str(rt))
-			} else {
-				valuePart = append(valuePart, rt)
-			}
-		} else if !value.IsNil() && kind == reflect.Slice {
-			if str, err := util.ObjectToJson(value.Interface()); err != nil {
-				return self.Error(util.AddStr("字段[", field.Name, "]转换失败: ", err.Error()))
-			} else {
-				valuePart = append(valuePart, str)
-			}
-		} else if !value.IsNil() && kind == reflect.Map {
-			if str, err := util.ObjectToJson(value.Interface()); err != nil {
-				return self.Error(util.AddStr("字段[", field.Name, "]转换失败: ", err.Error()))
-			} else {
-				valuePart = append(valuePart, str)
-			}
-		} else if !value.IsNil() && kind == reflect.Slice {
-			if str, err := util.ObjectToJson(value.Interface()); err != nil {
-				return self.Error(util.AddStr("字段[", field.Name, "]转换失败: ", err.Error()))
-			} else {
-				valuePart = append(valuePart, str)
-			}
-		} else if value.IsNil() {
-			continue
-		} else {
-			str, err := util.ObjectToJson(value.Interface());
-			if err != nil {
-				fmt.Println("字段输出json失败: " + value.String())
-			}
-			fmt.Println(util.AddStr("警告: 不支持的字段[", field.Name, "]类型[", kind.String(), "] --- ", str))
-			continue
-		}
-		fieldPart1.WriteString(field.Tag.Get(sqlc.Bson))
-		fieldPart1.WriteString(",")
-		fieldPart2.WriteString("?,")
-	}
-	s1 := fieldPart1.String()
-	s2 := fieldPart2.String()
-	var sqlbuf bytes.Buffer
-	sqlbuf.WriteString("insert into ")
-	sqlbuf.WriteString(tb)
-	sqlbuf.WriteString(" (")
-	sqlbuf.WriteString(util.Substr(s1, 0, len(s1)-1))
-	sqlbuf.WriteString(")")
-	sqlbuf.WriteString(" values (")
-	sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
-	sqlbuf.WriteString(")")
-	defer self.debug("Save", sqlbuf.String(), valuePart, start)
+func (self *RDBManager) Save(datas ...interface{}) error {
 	var stmt *sql.Stmt
-	var ret sql.Result
-	if self.AutoTx {
-		stmt, err = self.Tx.Prepare(sqlbuf.String())
-	} else {
-		stmt, err = self.Db.Prepare(sqlbuf.String())
-	}
-	if err != nil {
-		return self.Error(util.AddStr("预编译sql[", sqlbuf.String(), "]失败: ", err.Error()))
-	}
-	defer stmt.Close()
-	ret, err = stmt.Exec(valuePart...)
-	if err != nil {
-		return self.Error(util.AddStr("保存数据失败: ", err.Error()))
-	}
-	if rowsAffected, err := ret.RowsAffected(); err != nil {
-		return self.Error(util.AddStr("保存数据失败: ", err.Error()))
-	} else if rowsAffected <= 0 {
-		return self.Error(util.AddStr("保存数据失败: 受影响行数 -> ", util.AnyToStr(rowsAffected)))
-	}
-	if !self.AutoID {
-		if lastInsertId, err := ret.LastInsertId(); err != nil {
+	var svsql string
+	for e := range datas {
+		data := datas[e]
+		start := util.Time()
+		if data == nil {
+			return self.Error("参数不能为空")
+		}
+		if reflect.ValueOf(data).Kind() != reflect.Ptr {
+			return self.Error("参数值必须为指针类型")
+		}
+		tb, err := util.GetDbAndTb(data)
+		if err != nil {
+			return self.Error(err)
+		}
+		var fieldPart1, fieldPart2 bytes.Buffer
+		var valuePart = make([]interface{}, 0)
+		var idValue reflect.Value
+		tof := reflect.TypeOf(data).Elem()
+		vof := reflect.ValueOf(data).Elem()
+		for i := 0; i < tof.NumField(); i++ {
+			field := tof.Field(i)
+			value := vof.Field(i)
+			if util.ValidIgnore(field) {
+				continue
+			}
+			if field.Name == sqlc.Id {
+				if self.AutoID {
+					fieldPart1.WriteString(field.Tag.Get(sqlc.Json))
+					fieldPart1.WriteString(",")
+					fieldPart2.WriteString("?,")
+					if valueID, err := util.StrToInt64(util.GetUUID(int64(self.Node))); err != nil {
+						return err
+					} else {
+						valuePart = append(valuePart, valueID)
+						value.SetInt(valueID)
+					}
+				} else {
+					idValue = value
+				}
+				continue
+			}
+			kind := value.Kind()
+			if kind == reflect.String {
+				valuePart = append(valuePart, value.String())
+			} else if kind == reflect.Int || kind == reflect.Int8 || kind == reflect.Int16 || kind == reflect.Int32 || kind == reflect.Int64 {
+				rt := value.Int()
+				if kind == reflect.Int64 && rt > 0 && util.ValidDate(field) {
+					valuePart = append(valuePart, util.Time2Str(rt))
+				} else {
+					valuePart = append(valuePart, rt)
+				}
+			} else if !value.IsNil() && kind == reflect.Slice {
+				if str, err := util.ObjectToJson(value.Interface()); err != nil {
+					return self.Error(util.AddStr("字段[", field.Name, "]转换失败: ", err.Error()))
+				} else {
+					valuePart = append(valuePart, str)
+				}
+			} else if !value.IsNil() && kind == reflect.Map {
+				if str, err := util.ObjectToJson(value.Interface()); err != nil {
+					return self.Error(util.AddStr("字段[", field.Name, "]转换失败: ", err.Error()))
+				} else {
+					valuePart = append(valuePart, str)
+				}
+			} else if !value.IsNil() && kind == reflect.Slice {
+				if str, err := util.ObjectToJson(value.Interface()); err != nil {
+					return self.Error(util.AddStr("字段[", field.Name, "]转换失败: ", err.Error()))
+				} else {
+					valuePart = append(valuePart, str)
+				}
+			} else if value.IsNil() {
+				continue
+			} else {
+				str, err := util.ObjectToJson(value.Interface());
+				if err != nil {
+					fmt.Println("字段输出json失败: " + value.String())
+				}
+				fmt.Println(util.AddStr("警告: 不支持的字段[", field.Name, "]类型[", kind.String(), "] --- ", str))
+				continue
+			}
+			fieldPart1.WriteString(field.Tag.Get(sqlc.Bson))
+			fieldPart1.WriteString(",")
+			fieldPart2.WriteString("?,")
+		}
+		s1 := fieldPart1.String()
+		s2 := fieldPart2.String()
+		var sqlbuf bytes.Buffer
+		sqlbuf.WriteString("insert into ")
+		sqlbuf.WriteString(tb)
+		sqlbuf.WriteString(" (")
+		sqlbuf.WriteString(util.Substr(s1, 0, len(s1)-1))
+		sqlbuf.WriteString(")")
+		sqlbuf.WriteString(" values (")
+		sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
+		sqlbuf.WriteString(")")
+		if len(svsql) == 0 {
+			svsql = sqlbuf.String()
+			defer self.debug("Save", svsql, valuePart, start)
+			if self.AutoTx {
+				stmt, err = self.Tx.Prepare(svsql)
+			} else {
+				stmt, err = self.Db.Prepare(svsql)
+			}
+			if err != nil {
+				return self.Error(util.AddStr("预编译sql[", svsql, "]失败: ", err.Error()))
+			}
+			defer stmt.Close()
+		}
+		ret, err := stmt.Exec(valuePart...)
+		if err != nil {
 			return self.Error(util.AddStr("保存数据失败: ", err.Error()))
-		} else {
-			if lastInsertId > 0 {
-				idValue.SetInt(lastInsertId)
+		}
+		if rowsAffected, err := ret.RowsAffected(); err != nil {
+			return self.Error(util.AddStr("保存数据失败: ", err.Error()))
+		} else if rowsAffected <= 0 {
+			return self.Error(util.AddStr("保存数据失败: 受影响行数 -> ", util.AnyToStr(rowsAffected)))
+		}
+		if !self.AutoID {
+			if lastInsertId, err := ret.LastInsertId(); err != nil {
+				return self.Error(util.AddStr("保存数据失败: ", err.Error()))
+			} else {
+				if lastInsertId > 0 {
+					idValue.SetInt(lastInsertId)
+				}
 			}
 		}
 	}
-	return self.AddCacheSync(data)
+	return self.AddCacheSync(datas...)
 }
 
 func (self *RDBManager) Update(data interface{}) error {
