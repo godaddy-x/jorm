@@ -213,16 +213,19 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 		monitor.RpcPort = port
 		monitor.Protocol = protocol
 	}
-	rpc, err := rpc.DialHTTP(protocol, host)
+	client, err := rpc.DialHTTP(protocol, host)
 	if err != nil {
 		log.Println(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error()))
 		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error())))
 	}
-	defer rpc.Close()
-	call := <-rpc.Go(srv, args, reply, nil).Done
-	if call.Error != nil {
-		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", call.Error.Error())))
+	defer client.Close()
+	if err := client.Call(srv, args, reply); err != nil {
+		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err.Error())))
 	}
+	//call := <-client.Go(srv, args, reply, nil).Done
+	//if call.Error != nil {
+	//	return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", call.Error.Error())))
+	//}
 	return self.rpcMonitor(monitor, nil)
 }
 
