@@ -1,6 +1,8 @@
 package consul
 
 import (
+	"bufio"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"github.com/godaddy-x/jorm/amqp"
@@ -12,6 +14,7 @@ import (
 	"net/rpc"
 	"reflect"
 	"strings"
+	"time"
 )
 
 var (
@@ -164,12 +167,41 @@ func (self *ConsulManager) AddRegistration(name string, iface interface{}) {
 
 // 开启并监听服务
 func (self *ConsulManager) StartListenAndServe() {
-	rpc.HandleHTTP()
+	//rpc.HandleHTTP()
+	//l, e := net.Listen(self.Config.Protocol, util.AddStr(":", util.AnyToStr(self.Config.ListenProt)))
+	//if e != nil {
+	//	panic("Consul监听服务异常: " + e.Error())
+	//}
+	//go http.Serve(l, nil)
+	//http.HandleFunc("/check", self.healthCheck)
+	//http.ListenAndServe(fmt.Sprintf(":%d", self.Config.CheckPort), nil)
 	l, e := net.Listen(self.Config.Protocol, util.AddStr(":", util.AnyToStr(self.Config.ListenProt)))
 	if e != nil {
 		panic("Consul监听服务异常: " + e.Error())
 	}
-	go http.Serve(l, nil)
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				log.Print("Error: accept rpc connection", err.Error())
+				continue
+			}
+			go func(conn net.Conn) {
+				buf := bufio.NewWriter(conn)
+				srv := &gobServerCodec{
+					rwc:    conn,
+					dec:    gob.NewDecoder(conn),
+					enc:    gob.NewEncoder(buf),
+					encBuf: buf,
+				}
+				err = rpc.ServeRequest(srv)
+				if err != nil {
+					log.Print("Error: server rpc request", err.Error())
+				}
+				srv.Close()
+			}(conn)
+		}
+	}()
 	http.HandleFunc("/check", self.healthCheck)
 	http.ListenAndServe(fmt.Sprintf(":%d", self.Config.CheckPort), nil)
 }
@@ -213,15 +245,33 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 		monitor.RpcPort = port
 		monitor.Protocol = protocol
 	}
-	client, err := rpc.DialHTTP(protocol, host)
+	conn, err := net.DialTimeout(protocol, srv, time.Second*10)
 	if err != nil {
 		log.Println(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error()))
 		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error())))
 	}
-	defer client.Close()
-	if err := client.Call(srv, args, reply); err != nil {
-		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err.Error())))
+	encBuf := bufio.NewWriter(conn)
+	codec := &gobClientCodec{conn, gob.NewDecoder(conn), gob.NewEncoder(encBuf), encBuf}
+	cli := rpc.NewClientWithCodec(codec)
+	err1 := cli.Call(srv, args, reply)
+	err2 := cli.Close()
+	if err1 != nil && err2 != nil {
+		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err1.Error(), ";", err2.Error())))
 	}
+	if err1 != nil {
+		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err1.Error())))
+	} else {
+		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err2.Error())))
+	}
+	//client, err := rpc.DialHTTP(protocol, host)
+	//if err != nil {
+	//	log.Println(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error()))
+	//	return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error())))
+	//}
+	//defer client.Close()
+	//if err := client.Call(srv, args, reply); err != nil {
+	//	return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err.Error())))
+	//}
 	//call := <-client.Go(srv, args, reply, nil).Done
 	//if call.Error != nil {
 	//	return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", call.Error.Error())))
