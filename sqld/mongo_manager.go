@@ -231,7 +231,7 @@ func (self *MGOManager) Count(cnd *sqlc.Cnd) (int64, error) {
 		return 0, err
 	} else if isc && hasv {
 		ok = isc
-		defer self.debug("FindOne by Cache", make([]interface{}, 0), start)
+		defer self.debug("Count by Cache", make([]interface{}, 0), start)
 	} else if isc && !hasv {
 		defer self.putByCache(cnd, &pageTotal)
 	}
