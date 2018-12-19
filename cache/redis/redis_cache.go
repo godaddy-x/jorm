@@ -41,9 +41,11 @@ func (self *RedisManager) InitConfig(input ...RedisConfig) (*RedisManager, error
 			if err != nil {
 				return nil, err
 			}
-			if _, err := c.Do("AUTH", conf.Password); err != nil {
-				c.Close()
-				return nil, err
+			if len(conf.Password) > 0 {
+				if _, err := c.Do("AUTH", conf.Password); err != nil {
+					c.Close()
+					return nil, err
+				}
 			}
 			return c, err
 		}}
