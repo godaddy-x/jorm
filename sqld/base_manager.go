@@ -1135,10 +1135,14 @@ func DataToMap(fieldArray []reflect.StructField, raw [][]byte) (string, error) {
 			}
 		} else if kind == "int64" {
 			if util.ValidDate(field) {
-				if i64, err := util.Str2Time(string(raw[i])); err != nil {
-					return "", util.Error("对象字段[", f, "]转换int64失败: ", err.Error())
+				if vs == "0000-00-00 00:00:00" {
+					result[f] = 0
 				} else {
-					result[f] = i64
+					if i64, err := util.Str2Time(string(raw[i])); err != nil {
+						return "", util.Error("对象字段[", f, "]转换int64失败: ", err.Error())
+					} else {
+						result[f] = i64
+					}
 				}
 			} else {
 				if i64, err := util.StrToInt64(string(raw[i])); err != nil {
