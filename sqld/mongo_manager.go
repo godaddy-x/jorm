@@ -227,13 +227,15 @@ func (self *MGOManager) Count(cnd *sqlc.Cnd) (int64, error) {
 	}
 	var ok bool
 	var pageTotal int64
-	if isc, hasv, err := self.getByCache(cnd, &pageTotal); err != nil {
+	var total string
+	if isc, hasv, err := self.getByCache(cnd, &total); err != nil {
 		return 0, err
 	} else if isc && hasv {
+		ok = isc
+		pageTotal, _ = util.StrToInt64(total)
 		defer self.debug("FindOne by Cache", make([]interface{}, 0), start)
-		ok = true
 	} else if isc && !hasv {
-		defer self.putByCache(cnd, &pageTotal)
+		defer self.putByCache(cnd, &total)
 	}
 	if !ok {
 		copySession := self.Session.Copy()
