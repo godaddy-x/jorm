@@ -254,19 +254,24 @@ func HasStr(s1 string, s2 string) bool {
 }
 
 // 高性能拼接字符串
-func AddStr(str ...string) string {
+func AddStr(str ...interface{}) string {
 	if str == nil || len(str) == 0 {
 		return ""
 	}
 	var rstr bytes.Buffer
 	for e := range str {
-		rstr.WriteString(str[e])
+		s := str[e]
+		if v, b := s.(string); b {
+			rstr.WriteString(v)
+		} else {
+			rstr.WriteString(AnyToStr(s))
+		}
 	}
 	return rstr.String()
 }
 
 // 高性能拼接错误对象
-func Error(str ...string) error {
+func Error(str ...interface{}) error {
 	msg := AddStr(str...)
 	return errors.New(msg)
 }

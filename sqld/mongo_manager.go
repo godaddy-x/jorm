@@ -415,7 +415,7 @@ func (self *MGOManager) buildPipeCondition(cnd *sqlc.Cnd, iscount bool) ([]inter
 		tmp = make(map[string]interface{})
 		tmp["$limit"] = pageinfo[1]
 		pipe = append(pipe, tmp)
-		if !cnd.Pagination.IsOffset {
+		if !cnd.CacheConfig.Open && !cnd.Pagination.IsOffset {
 			pageTotal, err := self.Count(cnd)
 			if err != nil {
 				return nil, err
