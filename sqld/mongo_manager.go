@@ -225,28 +225,40 @@ func (self *MGOManager) Count(cnd *sqlc.Cnd) (int64, error) {
 	if cnd.Model == nil {
 		return 0, util.Error("ORM对象类型不能为空,请通过M(...)方法设置对象类型")
 	}
-	copySession := self.Session.Copy()
-	defer copySession.Close()
-	db, err := self.GetDatabase(copySession, cnd.Model)
-	if err != nil {
+	var ok bool
+	var pageTotal int64
+	if isc, hasv, err := self.getByCache(cnd, &pageTotal); err != nil {
 		return 0, err
+	} else if isc && hasv {
+		defer self.debug("FindOne by Cache", make([]interface{}, 0), start)
+		ok = true
+	} else if isc && !hasv {
+		defer self.putByCache(cnd, &pageTotal)
 	}
-	pipe, err := self.buildPipeCondition(cnd, true)
-	if err != nil {
-		return 0, util.Error("mongo构建查询命令失败: ", err.Error())
-	}
-	defer self.debug("Count", pipe, start)
-	result := make(map[string]int64)
-	err = db.Pipe(pipe).One(&result)
-	if err != nil {
-		if err.Error() == "not found" {
-			return 0, nil
-		}
-		return 0, util.Error("mongo查询数据失败: ", err.Error())
-	}
-	pageTotal, ok := result[COUNT_BY]
 	if !ok {
-		return 0, util.Error("获取记录数失败")
+		copySession := self.Session.Copy()
+		defer copySession.Close()
+		db, err := self.GetDatabase(copySession, cnd.Model)
+		if err != nil {
+			return 0, err
+		}
+		pipe, err := self.buildPipeCondition(cnd, true)
+		if err != nil {
+			return 0, util.Error("mongo构建查询命令失败: ", err.Error())
+		}
+		defer self.debug("Count", pipe, start)
+		result := make(map[string]int64)
+		err = db.Pipe(pipe).One(&result)
+		if err != nil {
+			if err.Error() == "not found" {
+				return 0, nil
+			}
+			return 0, util.Error("mongo查询数据失败: ", err.Error())
+		}
+		pageTotal, ok = result[COUNT_BY]
+		if !ok {
+			return 0, util.Error("获取记录数失败")
+		}
 	}
 	if pageTotal > 0 && cnd.Pagination.PageSize > 0 {
 		var pageCount int64
@@ -286,6 +298,7 @@ func (self *MGOManager) FindOne(cnd *sqlc.Cnd, data interface{}) error {
 	if isc, hasv, err := self.getByCache(cnd, data); err != nil {
 		return err
 	} else if isc && hasv {
+		defer self.debug("FindOne by Cache", make([]interface{}, 0), start)
 		return nil
 	} else if isc && !hasv {
 		defer self.putByCache(cnd, data)
@@ -333,6 +346,7 @@ func (self *MGOManager) FindList(cnd *sqlc.Cnd, data interface{}) error {
 	if isc, hasv, err := self.getByCache(cnd, data); err != nil {
 		return err
 	} else if isc && hasv {
+		defer self.debug("FindList by Cache", make([]interface{}, 0), start)
 		return nil
 	} else if isc && !hasv {
 		defer self.putByCache(cnd, data)
