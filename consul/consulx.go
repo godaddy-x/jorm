@@ -245,7 +245,7 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 		monitor.RpcPort = port
 		monitor.Protocol = protocol
 	}
-	conn, err := net.DialTimeout(protocol, srv, time.Second*10)
+	conn, err := net.DialTimeout(protocol, host, time.Second*10)
 	if err != nil {
 		log.Println(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error()))
 		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error())))
@@ -256,12 +256,18 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	err1 := cli.Call(srv, args, reply)
 	err2 := cli.Close()
 	if err1 != nil && err2 != nil {
-		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err1.Error(), ";", err2.Error())))
+		msg := util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err1.Error(), ";", err2.Error())
+		log.Println(msg)
+		return self.rpcMonitor(monitor, errors.New(msg))
 	}
 	if err1 != nil {
-		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err1.Error())))
-	} else {
-		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err2.Error())))
+		msg := util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err1.Error())
+		log.Println(msg)
+		return self.rpcMonitor(monitor, errors.New(msg))
+	} else if err2 != nil {
+		msg := util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err2.Error())
+		log.Println(msg)
+		return self.rpcMonitor(monitor, errors.New(msg))
 	}
 	//client, err := rpc.DialHTTP(protocol, host)
 	//if err != nil {
