@@ -85,6 +85,9 @@ func (self *RedisManager) Get(key string, input interface{}) (bool, error) {
 		return false, err
 	}
 	if len(value) > 0 {
+		if input == nil {
+			return true, nil
+		}
 		err := util.JsonToObject(value, input);
 		return true, err
 	}
