@@ -12,7 +12,6 @@ import (
 const (
 	MASTER = "MASTER"
 	DIRECT = "direct"
-	DLX    = "x-dead-letter-exchange"
 )
 
 var (
@@ -46,10 +45,11 @@ type MsgData struct {
 }
 
 // Amqp延迟发送配置
-type DlxConfig struct {
-	Exchange string // 交换机
-	DlQueue  string // 死信队列
-	RtQueue  string // 重读队列
+type DLX struct {
+	DlxExchange string // 死信交换机
+	DlxQueue    string // 死信队列
+	DlkExchange string // 重读交换机
+	DlkQueue    string // 重读队列
 }
 
 // Amqp监听配置参数
@@ -132,45 +132,48 @@ func (self *AmqpManager) bindExchangeAndQueue(exchange, queue, kind string, tabl
 }
 
 // 根据通道发送信息,如通道不存在则自动创建
-func (self *AmqpManager) Publish(data MsgData, dlx ...DlxConfig) error {
+func (self *AmqpManager) Publish(data MsgData, dlx ...DLX) error {
 	if len(data.Exchange) == 0 || len(data.Queue) == 0 {
 		return errors.New(util.AddStr("exchange,queue不能为空"))
 	}
 	if data.Content == nil {
 		return errors.New(util.AddStr("content不能为空"))
 	}
-	if err := self.bindExchangeAndQueue(data.Exchange, data.Queue, data.Kind, nil); err != nil {
-		return err
-	}
 	body, err := util.ObjectToJson(data)
 	if err != nil {
 		return errors.New("发送失败,消息无法转成JSON字符串: " + err.Error())
+	}
+	if err := self.bindExchangeAndQueue(data.Exchange, data.Queue, data.Kind, nil); err != nil {
+		return err
 	}
 	exchange := data.Exchange
 	queue := data.Queue
 	publish := amqp.Publishing{ContentType: "text/plain", Body: []byte(body)}
 	if dlx != nil && len(dlx) > 0 {
 		conf := dlx[0]
-		if len(conf.Exchange) == 0 {
+		if len(conf.DlxExchange) == 0 {
 			return errors.New(util.AddStr("死信交换机不能为空"))
 		}
-		if len(conf.DlQueue) == 0 {
+		if len(conf.DlxQueue) == 0 {
 			return errors.New(util.AddStr("死信队列不能为空"))
 		}
-		if len(conf.RtQueue) == 0 {
+		if len(conf.DlkExchange) == 0 {
+			return errors.New(util.AddStr("重读交换机不能为空"))
+		}
+		if len(conf.DlkQueue) == 0 {
 			return errors.New(util.AddStr("重读队列不能为空"))
 		}
-		if err := self.bindExchangeAndQueue(conf.Exchange, conf.RtQueue, DIRECT, nil); err != nil {
+		if err := self.bindExchangeAndQueue(conf.DlkExchange, conf.DlkQueue, DIRECT, nil); err != nil {
 			return err
 		}
-		if err := self.bindExchangeAndQueue(conf.Exchange, conf.DlQueue, DIRECT, amqp.Table{DLX: conf.RtQueue}); err != nil {
+		if err := self.bindExchangeAndQueue(conf.DlxExchange, conf.DlxQueue, DIRECT, amqp.Table{"x-dead-letter-exchange": conf.DlkExchange, "x-dead-letter-routing-key": conf.DlkQueue}); err != nil {
 			return err
 		}
 		if data.Delay <= 0 {
 			return errors.New(util.AddStr("延时发送时间必须大于0毫秒"))
 		}
-		exchange = conf.Exchange
-		queue = conf.DlQueue
+		exchange = conf.DlxExchange
+		queue = conf.DlxQueue
 		publish.Expiration = util.AnyToStr(data.Delay)
 	}
 	if err := self.channel.Publish(exchange, queue, false, false, publish); err != nil {
