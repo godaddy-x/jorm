@@ -12,6 +12,7 @@ import (
 const (
 	MASTER = "MASTER"
 	DIRECT = "direct"
+	DLX    = "x-dead-letter-exchange"
 )
 
 var (
@@ -42,6 +43,13 @@ type MsgData struct {
 	Type     int64       `json:"type"`
 	Delay    int64       `json:"delay"`
 	Retries  int64       `json:"retries"`
+}
+
+// Amqp延迟发送配置
+type DlxConfig struct {
+	Exchange string // 交换机
+	DlQueue  string // 死信队列
+	RtQueue  string // 重读队列
 }
 
 // Amqp监听配置参数
@@ -102,42 +110,70 @@ func (self *AmqpManager) Client(dsname ...string) (*AmqpManager, error) {
 	return manager, nil
 }
 
+func (self *AmqpManager) bindExchangeAndQueue(exchange, queue, kind string, table amqp.Table) error {
+	exist, _ := channels.Load(util.AddStr(exchange, ":", queue))
+	if exist == nil {
+		if len(kind) == 0 {
+			kind = DIRECT
+		}
+		err := self.channel.ExchangeDeclare(exchange, kind, true, false, false, false, nil)
+		if err != nil {
+			return errors.New(util.AddStr("创建exchange[", exchange, "]失败,请重新尝试..."))
+		}
+		if _, err = self.channel.QueueDeclare(queue, true, false, false, false, table); err != nil {
+			return errors.New(util.AddStr("创建queue[", queue, "]失败,请重新尝试..."))
+		}
+		if err := self.channel.QueueBind(queue, queue, exchange, false, nil); err != nil {
+			return errors.New(util.AddStr("exchange[", exchange, "]和queue[", queue, "]绑定失败,请重新尝试..."))
+		}
+		channels.Store(util.AddStr(exchange, ":", queue), true)
+	}
+	return nil
+}
+
 // 根据通道发送信息,如通道不存在则自动创建
-func (self *AmqpManager) Publish(data MsgData) error {
+func (self *AmqpManager) Publish(data MsgData, dlx ...DlxConfig) error {
 	if len(data.Exchange) == 0 || len(data.Queue) == 0 {
 		return errors.New(util.AddStr("exchange,queue不能为空"))
 	}
 	if data.Content == nil {
 		return errors.New(util.AddStr("content不能为空"))
 	}
-	exist, _ := channels.Load(util.AddStr(data.Exchange, ":", data.Queue))
-	if exist == nil {
-		kind := DIRECT
-		if len(data.Kind) > 0 {
-			kind = data.Kind
-		}
-		err := self.channel.ExchangeDeclare(data.Exchange, kind, true, false, false, false, nil)
-		if err != nil {
-			return errors.New(util.AddStr("创建exchange[", data.Exchange, "]失败,请重新尝试..."))
-		}
-		_, err = self.channel.QueueDeclare(data.Queue, true, false, false, false, nil)
-		if err != nil {
-			return errors.New(util.AddStr("创建queue[", data.Queue, "]失败,请重新尝试..."))
-		}
-		err = self.channel.QueueBind(data.Queue, data.Queue, data.Exchange, false, nil)
-		if err != nil {
-			return errors.New(util.AddStr("exchange[", data.Exchange, "]和queue[", data.Queue, "]绑定失败,请重新尝试..."))
-		}
-		channels.Store(util.AddStr(data.Exchange, ":", data.Queue), true)
+	if err := self.bindExchangeAndQueue(data.Exchange, data.Queue, data.Kind, nil); err != nil {
+		return err
 	}
 	body, err := util.ObjectToJson(data)
 	if err != nil {
 		return errors.New("发送失败,消息无法转成JSON字符串: " + err.Error())
 	}
-	if err := self.channel.Publish(data.Exchange, data.Queue, false, false, amqp.Publishing{
-		ContentType: "text/plain",
-		Body:        []byte(body),
-	}); err != nil {
+	exchange := data.Exchange
+	queue := data.Queue
+	publish := amqp.Publishing{ContentType: "text/plain", Body: []byte(body)}
+	if dlx != nil && len(dlx) > 0 {
+		conf := dlx[0]
+		if len(conf.Exchange) == 0 {
+			return errors.New(util.AddStr("死信交换机不能为空"))
+		}
+		if len(conf.DlQueue) == 0 {
+			return errors.New(util.AddStr("死信队列不能为空"))
+		}
+		if len(conf.RtQueue) == 0 {
+			return errors.New(util.AddStr("重读队列不能为空"))
+		}
+		if err := self.bindExchangeAndQueue(conf.Exchange, conf.RtQueue, DIRECT, nil); err != nil {
+			return err
+		}
+		if err := self.bindExchangeAndQueue(conf.Exchange, conf.DlQueue, DIRECT, amqp.Table{DLX: conf.RtQueue}); err != nil {
+			return err
+		}
+		if data.Delay <= 0 {
+			return errors.New(util.AddStr("延时发送时间必须大于0毫秒"))
+		}
+		exchange = conf.Exchange
+		queue = conf.DlQueue
+		publish.Expiration = util.AnyToStr(data.Delay)
+	}
+	if err := self.channel.Publish(exchange, queue, false, false, publish); err != nil {
 		return errors.New(util.AddStr("[", data.Exchange, "][", data.Queue, "][", body, "]发送失败: ", err.Error()))
 	}
 	return nil
@@ -148,25 +184,8 @@ func (self *AmqpManager) Pull(data LisData, callback func(msg MsgData) (MsgData,
 	if len(data.Exchange) == 0 || len(data.Queue) == 0 {
 		return errors.New(util.AddStr("exchange,queue不能为空"))
 	}
-	exist, _ := channels.Load(util.AddStr(data.Exchange, ":", data.Queue))
-	if exist == nil {
-		kind := DIRECT
-		if len(data.Kind) > 0 {
-			kind = data.Kind
-		}
-		err := self.channel.ExchangeDeclare(data.Exchange, kind, true, false, false, false, nil)
-		if err != nil {
-			return errors.New(util.AddStr("创建exchange[", data.Exchange, "]失败,请重新尝试..."))
-		}
-		_, err = self.channel.QueueDeclare(data.Queue, true, false, false, false, nil)
-		if err != nil {
-			return errors.New(util.AddStr("创建queue[", data.Queue, "]失败,请重新尝试..."))
-		}
-		err = self.channel.QueueBind(data.Queue, data.Queue, data.Exchange, false, nil)
-		if err != nil {
-			return errors.New(util.AddStr("exchange[", data.Exchange, "]和queue[", data.Queue, "]绑定失败,请重新尝试..."))
-		}
-		channels.Store(util.AddStr(data.Exchange, ":", data.Queue), true)
+	if err := self.bindExchangeAndQueue(data.Exchange, data.Queue, data.Kind, nil); err != nil {
+		return err
 	}
 	log.Println(util.AddStr("exchange[", data.Exchange, "] - queue[", data.Queue, "] MQ监听服务启动成功..."))
 	self.channel.Qos(data.PrefetchCount, data.PrefetchSize, true)

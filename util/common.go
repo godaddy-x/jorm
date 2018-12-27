@@ -19,6 +19,7 @@ import (
 	"github.com/shopspring/decimal"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net"
 	"reflect"
 	"strconv"
@@ -575,4 +576,8 @@ func Base64URLDecode(input string) string {
 	} else {
 		return string(r)
 	}
+}
+
+func Random6str() string {
+	return fmt.Sprintf("%06v", rand.New(rand.NewSource(time.Now().UnixNano())).Int31n(1000000))
 }
