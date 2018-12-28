@@ -22,12 +22,8 @@ type exception struct {
 	Msg  string
 }
 
-func Try(msg string, code ...int) error {
-	c := BIZ
-	if code != nil && len(code) > 0 {
-		c = code[0]
-	}
-	if s, err := util.ObjectToJson(exception{c, msg}); err != nil {
+func Try(code int, msg ...interface{}) error {
+	if s, err := util.ObjectToJson(exception{code, util.AddStr(msg...)}); err != nil {
 		log.Println(err)
 		return errors.New(util.AddStr("异常转换失败: ", err.Error()))
 	} else {
