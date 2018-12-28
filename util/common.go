@@ -255,15 +255,17 @@ func HasStr(s1 string, s2 string) bool {
 }
 
 // 高性能拼接字符串
-func AddStr(str ...interface{}) string {
-	if str == nil || len(str) == 0 {
+func AddStr(input ...interface{}) string {
+	if input == nil || len(input) == 0 {
 		return ""
 	}
 	var rstr bytes.Buffer
-	for e := range str {
-		s := str[e]
+	for e := range input {
+		s := input[e]
 		if v, b := s.(string); b {
 			rstr.WriteString(v)
+		} else if v, b := s.(error); b {
+			rstr.WriteString(v.Error())
 		} else {
 			rstr.WriteString(AnyToStr(s))
 		}
@@ -272,8 +274,8 @@ func AddStr(str ...interface{}) string {
 }
 
 // 高性能拼接错误对象
-func Error(str ...interface{}) error {
-	msg := AddStr(str...)
+func Error(input ...interface{}) error {
+	msg := AddStr(input...)
 	return errors.New(msg)
 }
 

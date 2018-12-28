@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/godaddy-x/jorm/cache/redis"
+	"github.com/godaddy-x/jorm/exception"
 	"github.com/godaddy-x/jorm/jwt"
 	"github.com/godaddy-x/jorm/sqlc"
 	"github.com/godaddy-x/jorm/sqld"
@@ -145,4 +147,12 @@ func TestJWT(t *testing.T) {
 			fmt.Println(err)
 		}
 	}
+}
+
+func TestEX(t *testing.T) {
+	s := ex.Try( 100, errors.New("我的"))
+	fmt.Println(s)
+	s = errors.New("新异常咯")
+	ex := ex.Catch(s)
+	fmt.Println(ex)
 }

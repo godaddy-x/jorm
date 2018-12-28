@@ -14,6 +14,7 @@ import (
 
 const (
 	BIZ     = 100000 // 普通业务异常
+	SYSTEM  = 999998 // 系统级异常
 	UNKNOWN = 999999 // 未知异常
 )
 
