@@ -7,11 +7,13 @@ import (
 	"github.com/streadway/amqp"
 	"log"
 	"sync"
+	"time"
 )
 
 const (
-	MASTER = "MASTER"
-	DIRECT = "direct"
+	MASTER        = "MASTER"
+	DIRECT        = "direct"
+	PrefetchCount = 50
 )
 
 var (
@@ -46,10 +48,11 @@ type MsgData struct {
 
 // Amqp延迟发送配置
 type DLX struct {
-	DlxExchange string // 死信交换机
-	DlxQueue    string // 死信队列
-	DlkExchange string // 重读交换机
-	DlkQueue    string // 重读队列
+	DlxExchange string                                 // 死信交换机
+	DlxQueue    string                                 // 死信队列
+	DlkExchange string                                 // 重读交换机
+	DlkQueue    string                                 // 重读队列
+	DlkCallFunc func(message MsgData) (MsgData, error) // 回调函数
 }
 
 // Amqp监听配置参数
@@ -172,6 +175,29 @@ func (self *AmqpManager) Publish(data MsgData, dlx ...DLX) error {
 		if data.Delay <= 0 {
 			return errors.New(util.AddStr("延时发送时间必须大于0毫秒"))
 		}
+		lisdata := LisData{
+			Exchange:      conf.DlkExchange,
+			Queue:         conf.DlkQueue,
+			PrefetchCount: PrefetchCount,
+		}
+		call := conf.DlkCallFunc
+		if conf.DlkCallFunc == nil {
+			call = func(msg MsgData) (MsgData, error) {
+				msg.Retries = msg.Retries + 1
+				msg.Delay = msg.Retries * msg.Delay
+				if msg.Retries > 10 {
+					return msg, nil
+				}
+				if err := self.Publish(msg); err != nil {
+					log.Println("延时回调发送异常: ", err.Error())
+				}
+				return msg, nil
+			}
+		}
+		go func() {
+			time.Sleep(time.Duration(3) * time.Second) // 睡眠3秒线程,防止与监听初始化冲突
+			self.Pull(lisdata, call)
+		}()
 		exchange = conf.DlxExchange
 		queue = conf.DlxQueue
 		publish.Expiration = util.AnyToStr(data.Delay)
