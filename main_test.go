@@ -9,7 +9,9 @@ import (
 	"github.com/godaddy-x/jorm/sqlc"
 	"github.com/godaddy-x/jorm/sqld"
 	"github.com/godaddy-x/jorm/util"
+	"github.com/godaddy-x/jorm/gauth"
 	"testing"
+	"time"
 )
 
 type User struct {
@@ -155,4 +157,20 @@ func TestEX(t *testing.T) {
 	s = errors.New("新异常咯")
 	ex := ex.Catch(s)
 	fmt.Println(ex)
+}
+
+func TestGA(t *testing.T) {
+	// 生成种子
+	seed := gauth.GenerateSeed()
+	fmt.Println("种子: ", seed)
+	// 通过种子生成密钥
+	key, _ := gauth.GenerateSecretKey(seed)
+	fmt.Println("密钥: ", key)
+	// 通过密钥+时间生成验证码
+	rs := gauth.GetNewCode(key, time.Now().Unix())
+	fmt.Println("验证码: ", rs)
+	fmt.Println("开始睡眠延迟中,请耐心等待...")
+	time.Sleep(5 * time.Second)
+	// 校验已有验证码
+	fmt.Println("校验结果: ", gauth.ValidCode(key, rs))
 }

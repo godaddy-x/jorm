@@ -452,6 +452,12 @@ func GetUUID(sec ...int64) string {
 	return node.Generate().String()
 }
 
+func GetUUIDInt64(sec ...int64) int64 {
+	uuid := GetUUID(sec...)
+	r, _ := StrToInt64(uuid)
+	return r
+}
+
 // 校验是否跳过入库字段
 func ValidIgnore(field reflect.StructField) bool {
 	if field.Tag.Get(sqlc.Ignore) == sqlc.True {
