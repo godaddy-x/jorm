@@ -189,7 +189,7 @@ func (self *RDBManager) GetDB(option ...Option) error {
 	}
 	rdb := RDBs[ds]
 	if rdb == nil {
-		return util.Error("SQL数据源[", ds, "]未找到,请检查...")
+		return self.Error(util.AddStr("SQL数据源[", ds, "]未找到,请检查..."))
 	}
 	self.Db = rdb.Db
 	self.Debug = rdb.Debug
@@ -200,7 +200,7 @@ func (self *RDBManager) GetDB(option ...Option) error {
 		self.CacheSync = ops.CacheSync
 		if ops.AutoTx {
 			if tx, err := self.Db.Begin(); err != nil {
-				return util.Error("数据库开启事务失败: ", err.Error())
+				return self.Error(util.AddStr("数据库开启事务失败: ", err.Error()))
 			} else {
 				self.AutoTx = ops.AutoTx
 				self.Tx = tx
@@ -214,7 +214,7 @@ func (self *RDBManager) GetDB(option ...Option) error {
 
 func (self *RDBManager) Save(datas ...interface{}) error {
 	if datas == nil || len(datas) == 0 {
-		return util.Error("参数不能为空")
+		return self.Error("参数列表不能为空")
 	}
 	var stmt *sql.Stmt
 	var svsql string
@@ -222,7 +222,7 @@ func (self *RDBManager) Save(datas ...interface{}) error {
 		data := datas[e]
 		start := util.Time()
 		if data == nil {
-			return self.Error("参数不能为空")
+			return self.Error("参数元素不能为空")
 		}
 		if reflect.ValueOf(data).Kind() != reflect.Ptr {
 			return self.Error("参数值必须为指针类型")
@@ -244,7 +244,7 @@ func (self *RDBManager) Save(datas ...interface{}) error {
 					fieldPart1.WriteString(",")
 					fieldPart2.WriteString("?,")
 					if valueID, err := util.StrToInt64(util.GetUUID(int64(self.Node))); err != nil {
-						return err
+						return self.Error(err)
 					} else {
 						valuePart = append(valuePart, valueID)
 						value.SetInt(valueID)
@@ -349,13 +349,13 @@ func (self *RDBManager) Save(datas ...interface{}) error {
 
 func (self *RDBManager) Update(datas ...interface{}) error {
 	if datas == nil || len(datas) == 0 {
-		return util.Error("参数不能为空")
+		return self.Error("参数列表不能为空")
 	}
 	for e := range datas {
 		data := datas[e]
 		start := util.Time()
 		if data == nil {
-			return self.Error("参数不能为空")
+			return self.Error("参数元素不能为空")
 		}
 		if reflect.ValueOf(data).Kind() != reflect.Ptr {
 			return self.Error("参数值必须为指针类型")
@@ -742,13 +742,12 @@ func (self *RDBManager) FindOne(cnd *sqlc.Cnd, data interface{}) error {
 	if err != nil {
 		return self.Error(util.AddStr("读取查询结果失败: ", err.Error()))
 	}
-	if len(raws) <= 0 {
-		return nil
-	}
-	if str, err := DataToMap(fieldArray, raws[0]); err != nil {
-		return self.Error(err)
-	} else if err := util.JsonToObject(str, data); err != nil {
-		return self.Error(err)
+	if len(raws) > 0 {
+		if str, err := DataToMap(fieldArray, raws[0]); err != nil {
+			return self.Error(err)
+		} else if err := util.JsonToObject(str, data); err != nil {
+			return self.Error(err)
+		}
 	}
 	return nil
 }

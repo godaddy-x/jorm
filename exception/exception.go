@@ -13,9 +13,13 @@ import (
  */
 
 const (
-	BIZ     = 100000 // 普通业务异常
-	SYSTEM  = 999998 // 系统级异常
-	UNKNOWN = 999999 // 未知异常
+	BIZ      = 100000 // 普通业务异常
+	JSON     = 999994 // JSON转换异常
+	NUMBER   = 999995 // 数值转换异常
+	DATABASE = 999996 // 数据库服务异常
+	CACHE    = 999997 // 缓存服务异常
+	SYSTEM   = 999998 // 系统级异常
+	UNKNOWN  = 999999 // 未知异常
 )
 
 type exception struct {
@@ -23,7 +27,7 @@ type exception struct {
 	Msg  string
 }
 
-func Try(code int, msg ...interface{}) error {
+func Throw(code int, msg ...interface{}) error {
 	if s, err := util.ObjectToJson(exception{code, util.AddStr(msg...)}); err != nil {
 		log.Println(err)
 		return errors.New(util.AddStr("异常转换失败: ", err.Error()))

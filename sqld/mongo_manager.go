@@ -61,11 +61,11 @@ func (self *MGOManager) GetDatabase(copySession *mgo.Session, data interface{}) 
 	}
 	database := copySession.DB("")
 	if database == nil {
-		return nil, util.Error("获取mongo数据库失败")
+		return nil, self.Error("获取mongo数据库失败")
 	}
 	collection := database.C(tb)
 	if collection == nil {
-		return nil, util.Error("获取mongo数据集合失败")
+		return nil, self.Error("获取mongo数据集合失败")
 	}
 	return collection, nil
 }
@@ -83,7 +83,7 @@ func (self *MGOManager) GetDB(option ...Option) error {
 	if len(mgo_sessions) > 0 {
 		manager := mgo_sessions[ds]
 		if manager == nil {
-			return util.Error("mongo数据源[", ds, "]未找到,请检查...")
+			return self.Error(util.AddStr("mongo数据源[", ds, "]未找到,请检查..."))
 		}
 		self.Debug = manager.Debug
 		self.Session = manager.Session
@@ -144,13 +144,13 @@ func (self *MGOManager) buildByConfig(manager cache.ICache, input ...MGOConfig) 
 // 保存或更新数据到mongo集合
 func (self *MGOManager) Save(datas ...interface{}) error {
 	if datas == nil || len(datas) == 0 {
-		return util.Error("参数不能为空")
+		return self.Error("参数列表不能为空")
 	}
 	for e := range datas {
 		start := util.Time()
 		data := datas[e]
 		if data == nil {
-			return util.Error("数据实体为空")
+			return self.Error("参数元素不能为空")
 		}
 		if reflect.ValueOf(data).Kind() != reflect.Ptr {
 			return self.Error("参数值必须为指针类型")
@@ -158,14 +158,13 @@ func (self *MGOManager) Save(datas ...interface{}) error {
 		objectId := util.GetDataID(data)
 		if objectId == 0 {
 			v := reflect.ValueOf(data).Elem()
-			uuid, _ := util.StrToInt64(util.GetUUID())
-			v.FieldByName("Id").Set(reflect.ValueOf(uuid))
+			v.FieldByName("Id").Set(reflect.ValueOf(util.GetUUIDInt64()))
 		}
 		copySession := self.Session.Copy()
 		defer copySession.Close()
 		db, err := self.GetDatabase(copySession, data)
 		if err != nil {
-			return err
+			return self.Error(err)
 		}
 		defer self.debug("Save/Update", data, start)
 		newObject := util.NewInstance(data)
@@ -173,13 +172,13 @@ func (self *MGOManager) Save(datas ...interface{}) error {
 		if err == nil { // 更新数据
 			err = db.UpdateId(objectId, data)
 			if err != nil {
-				return util.Error("mongo更新数据失败: ", err.Error())
+				return self.Error(util.AddStr("mongo更新数据失败: ", err.Error()))
 			}
 			return nil
 		} else { // 新增数据
 			err = db.Insert(data)
 			if err != nil {
-				return util.Error("mongo保存数据失败: ", err.Error())
+				return self.Error(util.AddStr("mongo保存数据失败: ", err.Error()))
 			}
 			return nil
 		}
@@ -194,13 +193,13 @@ func (self *MGOManager) Update(datas ...interface{}) error {
 
 func (self *MGOManager) Delete(datas ...interface{}) error {
 	if datas == nil || len(datas) == 0 {
-		return util.Error("参数不能为空")
+		return self.Error("参数列表不能为空")
 	}
 	for e := range datas {
 		data := datas[e]
 		start := util.Time()
 		if data == nil {
-			return util.Error("数据实体为空")
+			return self.Error("参数元素不能为空")
 		}
 		if reflect.ValueOf(data).Kind() != reflect.Ptr {
 			return self.Error("参数值必须为指针类型")
@@ -209,11 +208,11 @@ func (self *MGOManager) Delete(datas ...interface{}) error {
 		defer copySession.Close()
 		db, err := self.GetDatabase(copySession, data)
 		if err != nil {
-			return err
+			return self.Error(err)
 		}
 		defer self.debug("Delete", data, start)
 		if err := db.RemoveId(util.GetDataID(data)); err != nil {
-			return util.Error("删除数据ID失败")
+			return self.Error("删除数据ID失败")
 		}
 	}
 	return nil
@@ -223,7 +222,7 @@ func (self *MGOManager) Delete(datas ...interface{}) error {
 func (self *MGOManager) Count(cnd *sqlc.Cnd) (int64, error) {
 	start := util.Time()
 	if cnd.Model == nil {
-		return 0, util.Error("ORM对象类型不能为空,请通过M(...)方法设置对象类型")
+		return 0, self.Error("ORM对象类型不能为空,请通过M(...)方法设置对象类型")
 	}
 	var ok bool
 	var pageTotal int64
@@ -240,11 +239,11 @@ func (self *MGOManager) Count(cnd *sqlc.Cnd) (int64, error) {
 		defer copySession.Close()
 		db, err := self.GetDatabase(copySession, cnd.Model)
 		if err != nil {
-			return 0, err
+			return 0, self.Error(err)
 		}
 		pipe, err := self.buildPipeCondition(cnd, true)
 		if err != nil {
-			return 0, util.Error("mongo构建查询命令失败: ", err.Error())
+			return 0, self.Error(util.AddStr("mongo构建查询命令失败: ", err.Error()))
 		}
 		defer self.debug("Count", pipe, start)
 		result := make(map[string]int64)
@@ -253,11 +252,11 @@ func (self *MGOManager) Count(cnd *sqlc.Cnd) (int64, error) {
 			if err.Error() == "not found" {
 				return 0, nil
 			}
-			return 0, util.Error("mongo查询数据失败: ", err.Error())
+			return 0, self.Error(util.AddStr("mongo查询数据失败: ", err.Error()))
 		}
 		pageTotal, ok = result[COUNT_BY]
 		if !ok {
-			return 0, util.Error("获取记录数失败")
+			return 0, self.Error("获取记录数失败")
 		}
 	}
 	if pageTotal > 0 && cnd.Pagination.PageSize > 0 {
@@ -307,17 +306,17 @@ func (self *MGOManager) FindOne(cnd *sqlc.Cnd, data interface{}) error {
 	defer copySession.Close()
 	db, err := self.GetDatabase(copySession, elem)
 	if err != nil {
-		return err
+		return self.Error(err)
 	}
 	pipe, err := self.buildPipeCondition(cnd, false)
 	if err != nil {
-		return util.Error("mongo构建查询命令失败: ", err.Error())
+		return self.Error(util.AddStr("mongo构建查询命令失败: ", err.Error()))
 	}
 	defer self.debug("FindOne", pipe, start)
 	err = db.Pipe(pipe).One(data)
 	if err != nil {
 		if err.Error() != "not found" {
-			return util.Error("mongo查询数据失败: ", err.Error())
+			return self.Error(util.AddStr("mongo查询数据失败: ", err.Error()))
 		}
 	}
 	return nil
@@ -355,17 +354,17 @@ func (self *MGOManager) FindList(cnd *sqlc.Cnd, data interface{}) error {
 	defer copySession.Close()
 	db, err := self.GetDatabase(copySession, elem)
 	if err != nil {
-		return err
+		return self.Error(err)
 	}
 	pipe, err := self.buildPipeCondition(cnd, false)
 	if err != nil {
-		return util.Error("mongo构建查询命令失败: ", err.Error())
+		return self.Error(util.AddStr("mongo构建查询命令失败: ", err.Error()))
 	}
 	defer self.debug("FindList", pipe, start)
 	err = db.Pipe(pipe).All(data)
 	if err != nil {
 		if err.Error() != "not found" {
-			return util.Error("mongo查询数据失败: ", err.Error())
+			return self.Error(util.AddStr("mongo查询数据失败: ", err.Error()))
 		}
 	}
 	return nil
@@ -381,10 +380,10 @@ func (self *MGOManager) getByCache(cnd *sqlc.Cnd, data interface{}) (bool, bool,
 	config := cnd.CacheConfig
 	if config.Open && len(config.Key) > 0 {
 		if self.CacheManager == nil {
-			return true, false, util.Error("缓存管理器尚未初始化")
+			return true, false, self.Error("缓存管理器尚未初始化")
 		}
 		b, err := self.CacheManager.Get(config.Prefix+config.Key, data);
-		return true, b, err
+		return true, b, self.Error(err)
 	}
 	return false, false, nil
 }
@@ -394,7 +393,7 @@ func (self *MGOManager) putByCache(cnd *sqlc.Cnd, data interface{}) error {
 	config := cnd.CacheConfig
 	if config.Open && len(config.Key) > 0 {
 		if err := self.CacheManager.Put(config.Prefix+config.Key, data, config.Expire); err != nil {
-			return err
+			return self.Error(err)
 		}
 	}
 	return nil
