@@ -1,15 +1,14 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"github.com/godaddy-x/jorm/cache/redis"
 	"github.com/godaddy-x/jorm/exception"
+	"github.com/godaddy-x/jorm/gauth"
 	"github.com/godaddy-x/jorm/jwt"
 	"github.com/godaddy-x/jorm/sqlc"
 	"github.com/godaddy-x/jorm/sqld"
 	"github.com/godaddy-x/jorm/util"
-	"github.com/godaddy-x/jorm/gauth"
 	"testing"
 	"time"
 )
@@ -152,11 +151,14 @@ func TestJWT(t *testing.T) {
 }
 
 func TestEX(t *testing.T) {
-	s := ex.Try( 100, errors.New("我的"))
+	//s := ex.Throw(nil, 100, errors.New("我的"))
+	//fmt.Println(s)
+	//s = errors.New("新异常咯")
+	//ex := ex.Catch(s)
+	//fmt.Println(ex)
+	e := ex.Try{Code: 100, Msg: ""}.Log()
+	s := ex.Catch(e)
 	fmt.Println(s)
-	s = errors.New("新异常咯")
-	ex := ex.Catch(s)
-	fmt.Println(ex)
 }
 
 func TestGA(t *testing.T) {

@@ -1,7 +1,6 @@
 package ex
 
 import (
-	"errors"
 	"github.com/godaddy-x/jorm/util"
 	"log"
 	"strings"
@@ -36,31 +35,40 @@ const (
 	CACHE_D_ERR = "缓存数据删除失败"
 )
 
-type exception struct {
-	Code int
-	Msg  string
+type ErrLog interface {
+	Log() Try
 }
 
-func Throw(err interface{}, code int, msg ...interface{}) error {
-	if code > BIZ {
+type Try struct {
+	Code int         `json:"code"`
+	Msg  string      `json:"msg"`
+	Err  error       `json:"-"`
+	Ext  interface{} `json:"obj,omitempty"`
+}
+
+func (self Try) Log() Try {
+	log.Println(self.Err)
+	return self
+}
+
+func (self Try) Error() string {
+	if s, err := util.ObjectToJson(self); err != nil {
 		log.Println(err)
-	}
-	if s, err := util.ObjectToJson(exception{code, util.AddStr(msg...)}); err != nil {
-		log.Println(err)
-		return errors.New(util.AddStr("异常转换失败: ", err.Error()))
+		return util.AddStr("异常转换失败: ", err.Error())
 	} else {
-		return errors.New(s)
+		return s
 	}
+	return ""
 }
 
-func Catch(err error) exception {
+func Catch(err error) Try {
 	s := err.Error()
 	if strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}") {
-		ex := exception{}
+		ex := Try{}
 		if err := util.JsonToObject(s, &ex); err != nil {
-			return exception{UNKNOWN, util.AddStr("未知异常错误: ", err.Error())}
+			return Try{UNKNOWN, util.AddStr("未知异常错误: ", err.Error()), nil, err}
 		}
 		return ex
 	}
-	return exception{UNKNOWN, s}
+	return Try{UNKNOWN, s, nil, nil}
 }
