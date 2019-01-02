@@ -35,8 +35,21 @@ const (
 	CACHE_D_ERR = "缓存数据删除失败"
 )
 
-type ErrLog interface {
-	Log() Try
+var (
+	iLogger ILogger = new(LocalWriter)
+)
+
+type ILogger interface {
+	Log(try Try) error
+}
+
+type LocalWriter int
+
+func (self LocalWriter) Log(try Try) error {
+	if try.Code > BIZ {
+		log.Println(try.Err)
+	}
+	return nil
 }
 
 type Try struct {
@@ -46,12 +59,24 @@ type Try struct {
 	Ext  interface{} `json:"obj,omitempty"`
 }
 
-func (self Try) Log() Try {
-	log.Println(self.Err)
-	return self
+func InitLogAdapter(input ILogger) error {
+	if input == nil {
+		panic("错误日志实例不能为空")
+	} else {
+		iLogger = input
+	}
+	return nil
 }
 
 func (self Try) Error() string {
+	if self.Code == 0 {
+		self.Code = BIZ
+	}
+	if self.Err != nil {
+		if err := iLogger.Log(self); err != nil {
+			return util.AddStr("记录日志失败: ", err.Error())
+		}
+	}
 	if s, err := util.ObjectToJson(self); err != nil {
 		log.Println(err)
 		return util.AddStr("异常转换失败: ", err.Error())
