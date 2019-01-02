@@ -21,6 +21,7 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -586,6 +587,17 @@ func Base64URLDecode(input string) string {
 	}
 }
 
+// 随机获得6位数字
 func Random6str() string {
 	return fmt.Sprintf("%06v", rand.New(rand.NewSource(time.Now().UnixNano())).Int31n(1000000))
+}
+
+// 获取项目绝对路径
+func GetPath() string {
+	if path, err := os.Getwd(); err != nil {
+		log.Println(err)
+		return ""
+	} else {
+		return path
+	}
 }
