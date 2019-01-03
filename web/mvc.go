@@ -1,8 +1,9 @@
 package main
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/godaddy-x/jorm/exception"
 	"github.com/godaddy-x/jorm/util"
 	"html/template"
 	"io/ioutil"
@@ -10,93 +11,163 @@ import (
 	"strings"
 )
 
-var myTemplate *template.Template
+const (
+	HTTP    = 0
+	WEBSOCK = 1
+	UTF8    = "UTF-8"
+)
+const (
+	TEXT_HTML        = "text/html"
+	TEXT_PLAIN       = "text/plain"
+	APPLICATION_JSON = "application/json"
+)
 
-func getHeader(r *http.Request) (map[string]interface{}, error) {
-	return nil, nil
+func (self *HttpClient) getHeader(input interface{}) (map[string]interface{}, error) {
+	r := input.(*http.Request)
+	header := map[string]interface{}{}
+	if len(r.Header) > 0 {
+		for k, v := range r.Header {
+			header[k] = v[0]
+		}
+	}
+	return header, nil
 }
 
-func getParams(r *http.Request) (map[string]interface{}, error) {
+func (self *HttpClient) getParams(input interface{}) (map[string]interface{}, error) {
+	r := input.(*http.Request)
 	r.ParseForm()
 	params := map[string]interface{}{}
 	if r.Method == "GET" {
-		fmt.Println("method:", r.Method)
-		fmt.Println("username", r.Form["username"])
-		fmt.Println("password", r.Form["password"])
 		for k, v := range r.Form {
 			params[k] = strings.Join(v, "")
 		}
 	} else if r.Method == "POST" {
-		result, _ := ioutil.ReadAll(r.Body)
+		result, err := ioutil.ReadAll(r.Body)
+		if err != nil {
+			return nil, err
+		}
 		r.Body.Close()
-		fmt.Printf("%s\n", result)
-		json.Unmarshal(result, &params)
-		//m := f.(map[string]interface{})
-		//for k, v := range m {
-		//	switch vv := v.(type) {
-		//	case string:
-		//		fmt.Println(k, "is string", vv)
-		//	case int:
-		//		fmt.Println(k, "is int", vv)
-		//	case float64:
-		//		fmt.Println(k, "is float64", vv)
-		//	case []interface{}:
-		//		fmt.Println(k, "is an array:")
-		//		for i, u := range vv {
-		//			fmt.Println(i, u)
-		//		}
-		//	default:
-		//		fmt.Println(k, "is of a type I don't know how to handle")
-		//	}
-		//}
-		//var s Serverslice;
-		//json.Unmarshal([]byte(result), &s)
-		//fmt.Println(s.ServersID);
-		//for i := 0; i < len(s.Servers); i++ {
-		//	fmt.Println(s.Servers[i].ServerName)
-		//	fmt.Println(s.Servers[i].ServerIP)
-		//}
+		if err := util.JsonToObject(string(result), &params); err != nil {
+			return nil, err
+		}
 	}
-	return nil, nil
+	return params, nil
 }
 
 type Context struct {
-	header   interface{}
-	request  interface{}
-	response interface{}
-	error    error
+	header map[string]interface{}
+	params map[string]interface{}
+}
+
+type Response struct {
+	contentEncoding string
+	contentType     string
+	respEntity      interface{}
+	pagePath        string
 }
 
 type HttpClient struct {
 	context  *Context
-	response http.ResponseWriter
-	request  *http.Request
+	response *Response
+	input    *http.Request
+	output   http.ResponseWriter
 }
 
-func initTemplate(fileName string) (err error) {
-	myTemplate, err = template.ParseFiles(fileName)
-	if err != nil {
-		fmt.Println("parse file err:", err)
-		return
+func (self *HttpClient) html(page string, data interface{}) error {
+	if len(page) == 0 {
+		return errors.New("page path is nil")
 	}
-	return
+	self.response = &Response{contentEncoding: UTF8, contentType: TEXT_HTML, pagePath: page, respEntity: data}
+	templ, err := template.ParseFiles(self.response.pagePath)
+	if err != nil {
+		return err
+	}
+	if err := templ.Execute(self.output, self.response.respEntity); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (self *HttpClient) test() {
-	myTemplate.Execute(self.response, nil)
+func (self *HttpClient) json(data interface{}) error {
+	if data == nil {
+		data = map[string]interface{}{}
+	}
+	self.response = &Response{contentEncoding: UTF8, contentType: APPLICATION_JSON, respEntity: data}
+	self.output.Header().Set("Content-Type", APPLICATION_JSON)
+	result, err := util.ObjectToJson(data)
+	if err != nil {
+		return err
+	}
+	self.output.Write([]byte(result))
+	return nil
 }
 
-func (self *HttpClient) BindFunc(p string, call func()) {
-	http.DefaultServeMux.HandleFunc(p, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		self.request = r
-		self.response = w
-		self.context = &Context{}
-		self.test()
+func (self *HttpClient) text(data interface{}) error {
+	if data == nil {
+		data = map[string]interface{}{}
+	}
+	self.response = &Response{contentEncoding: UTF8, contentType: TEXT_PLAIN, respEntity: data}
+	self.output.Header().Set("Content-Type", TEXT_PLAIN)
+	result, err := util.ObjectToJson(data)
+	if err != nil {
+		return err
+	}
+	self.output.Write([]byte(result))
+	return nil
+}
+
+func (self *HttpClient) initContext(output interface{}, input interface{}) error {
+	w := output.(http.ResponseWriter)
+	r := input.(*http.Request)
+	context := &Context{}
+	if header, err := self.getHeader(r); err != nil {
+		return err
+	} else {
+		context.header = header
+	}
+	if params, err := self.getParams(r); err != nil {
+		return err
+	} else {
+		context.params = params
+	}
+	self.output = w
+	self.input = r
+	self.context = context
+	return nil
+}
+
+func (self *HttpClient) writeError(err error) {
+	out := ex.Catch(err)
+	if result, err := util.ObjectToJson(map[string]string{"msg": out.Msg}); err != nil {
+		self.output.Header().Set("Content-Type", APPLICATION_JSON)
+		self.output.WriteHeader(500)
+		self.output.Write([]byte("系统异常"))
+	} else {
+		self.output.Header().Set("Content-Type", APPLICATION_JSON)
+		self.output.WriteHeader(out.Code)
+		self.output.Write([]byte(result))
+	}
+}
+
+func (self *HttpClient) BindFunc(pattern string, handle func() error) {
+	http.DefaultServeMux.HandleFunc(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := self.initContext(w, r); err != nil {
+			self.writeError(ex.Try{400, "请求无效", err, nil})
+			return
+		}
+		if err := handle(); err != nil {
+			self.writeError(err)
+			return
+		}
 	}))
 }
 
+func (self *HttpClient) test() error {
+	// return self.html(util.GetPath()+"/web/index.html", nil)
+	return errors.New("我特使错误")
+}
+
 func main() {
-	initTemplate(util.GetPath() + "/web/index.html")
 	self := &HttpClient{}
 	self.BindFunc("/test", self.test)
 	err := http.ListenAndServe("0.0.0.0:8090", nil)
