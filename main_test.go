@@ -10,6 +10,8 @@ import (
 	"github.com/godaddy-x/jorm/sqlc"
 	"github.com/godaddy-x/jorm/sqld"
 	"github.com/godaddy-x/jorm/util"
+	"github.com/godaddy-x/jorm/webapp"
+	"net/http"
 	"testing"
 	"time"
 )
