@@ -13,7 +13,7 @@ const (
 
 type WebNode interface {
 	// 初始化上下文
-	InitContext(output, input interface{}) error
+	InitContext(ob, output, input interface{}) error
 	// 获取请求头数据
 	GetHeader(input interface{}) error
 	// 获取请求参数
@@ -21,15 +21,15 @@ type WebNode interface {
 	// 设置响应头格式
 	SetContentType(contentType string)
 	// 核心代理方法
-	Proxy(output, input interface{}, handle func() error)
+	Proxy(output, input interface{}, handle func(ctx *Context) error)
 	// 核心绑定路由方法
-	BindFuncByRouter(pattern string, handle func() error)
+	BindFuncByRouter(pattern string, handle func(ctx *Context) error)
 	// html响应模式
-	Html(view string, data interface{}) error
+	Html(ctx *Context, view string, data interface{}) error
 	// json响应模式
-	Json(data interface{}) error
+	Json(ctx *Context, data interface{}) error
 	// text响应模式
-	Text(data interface{}) error
+	Text(ctx *Context, data interface{}) error
 	// 前置检测方法(业务方法前执行)
 	PreHandle(handle func(ctx *Context) error) error
 	// 业务执行方法->自定义处理执行方法(业务方法执行后,视图渲染前执行)
@@ -42,15 +42,17 @@ type WebNode interface {
 	RenderError(err error)
 }
 type Context struct {
-	Header  map[string]interface{}
-	Params  map[string]interface{}
-	Subject interface{}
+	Header   map[string]interface{}
+	Params   map[string]interface{}
+	Subject  interface{}
+	Response *Response
 }
 
 type Response struct {
 	ContentEncoding string
 	ContentType     string
 	RespEntity      interface{}
+	TemplDir        string
 	RespView        string
 }
 
@@ -65,6 +67,5 @@ type CallFunc struct {
 
 type DefaultNode struct {
 	Context  *Context
-	Response *Response
 	CallFunc *CallFunc
 }

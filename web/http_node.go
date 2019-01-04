@@ -13,9 +13,9 @@ import (
 
 type HttpNode struct {
 	DefaultNode
-	Input       *http.Request
-	Output      http.ResponseWriter
-	ViewPathDir string
+	Input    *http.Request
+	Output   http.ResponseWriter
+	TemplDir string
 }
 
 type ViewConfig struct {
@@ -63,37 +63,37 @@ func (self *HttpNode) GetParams(input interface{}) error {
 	return self.CallFunc.GetParams(input)
 }
 
-func (self *HttpNode) Html(view string, data interface{}) error {
-	if len(self.ViewPathDir) == 0 {
-		return errors.New("view dir path is nil")
+func (self *HttpNode) Html(ctx *Context, view string, data interface{}) error {
+	if len(ctx.Response.TemplDir) == 0 {
+		return errors.New("templ dir path is nil")
 	}
 	if len(view) == 0 {
 		return errors.New("view file path is nil")
 	}
-	self.Response.ContentEncoding = UTF8
-	self.Response.ContentType = TEXT_HTML
-	self.Response.RespView = view
-	self.Response.RespEntity = data
+	ctx.Response.ContentEncoding = UTF8
+	ctx.Response.ContentType = TEXT_HTML
+	ctx.Response.RespView = view
+	ctx.Response.RespEntity = data
 	return nil
 }
 
-func (self *HttpNode) Json(data interface{}) error {
+func (self *HttpNode) Json(ctx *Context, data interface{}) error {
 	if data == nil {
 		data = map[string]interface{}{}
 	}
-	self.Response.ContentEncoding = UTF8
-	self.Response.ContentType = APPLICATION_JSON
-	self.Response.RespEntity = data
+	ctx.Response.ContentEncoding = UTF8
+	ctx.Response.ContentType = APPLICATION_JSON
+	ctx.Response.RespEntity = data
 	return nil
 }
 
-func (self *HttpNode) Text(data interface{}) error {
+func (self *HttpNode) Text(ctx *Context, data interface{}) error {
 	if data == nil {
 		data = map[string]interface{}{}
 	}
-	self.Response.ContentEncoding = UTF8
-	self.Response.ContentType = TEXT_PLAIN
-	self.Response.RespEntity = data
+	ctx.Response.ContentEncoding = UTF8
+	ctx.Response.ContentType = TEXT_PLAIN
+	ctx.Response.RespEntity = data
 	return nil
 }
 
@@ -101,31 +101,30 @@ func (self *HttpNode) SetContentType(contentType string) {
 	self.Output.Header().Set("Content-Type", contentType)
 }
 
-func (self *HttpNode) InitContext(output, input interface{}) error {
+func (self *HttpNode) InitContext(ob, output, input interface{}) error {
 	w := output.(http.ResponseWriter)
 	r := input.(*http.Request)
-	context := &Context{}
-	response := &Response{ContentEncoding: UTF8, ContentType: APPLICATION_JSON}
-	if err := self.GetHeader(r); err != nil {
-		return err
-	}
-	if err := self.GetParams(r); err != nil {
-		return err
-	}
+	o := ob.(*HttpNode)
 	if self.CallFunc == nil {
-		self.CallFunc = &CallFunc{}
+		o.CallFunc = &CallFunc{}
 	}
-	if len(self.ViewPathDir) == 0 {
+	o.CallFunc = self.CallFunc
+	if err := o.GetHeader(r); err != nil {
+		return err
+	}
+	if err := o.GetParams(r); err != nil {
+		return err
+	}
+	if len(self.TemplDir) == 0 {
 		if path, err := os.Getwd(); err != nil {
 			return err
 		} else {
-			self.ViewPathDir = path
+			self.TemplDir = path
 		}
 	}
-	self.Output = w
-	self.Input = r
-	self.Context = context
-	self.Response = response
+	o.Output = w
+	o.Input = r
+	o.Context = &Context{Response: &Response{ContentEncoding: UTF8, ContentType: APPLICATION_JSON, TemplDir: self.TemplDir}}
 	return nil
 }
 
@@ -138,7 +137,7 @@ func (self *HttpNode) PreHandle(handle func(ctx *Context) error) error {
 
 func (self *HttpNode) PostHandle(handle func(resp *Response, err error) error, err error) error {
 	if handle != nil {
-		if err := handle(self.Response, err); err != nil {
+		if err := handle(self.Context.Response, err); err != nil {
 			return err
 		}
 	}
@@ -147,7 +146,7 @@ func (self *HttpNode) PostHandle(handle func(resp *Response, err error) error, e
 
 func (self *HttpNode) AfterCompletion(handle func(ctx *Context, resp *Response, err error) error, err error) error {
 	if handle != nil {
-		if err := handle(self.Context, self.Response, err); err != nil {
+		if err := handle(self.Context, self.Context.Response, err); err != nil {
 			return err
 		}
 	}
@@ -170,22 +169,22 @@ func (self *HttpNode) RenderError(err error) {
 }
 
 func (self *HttpNode) Render() error {
-	switch self.Response.ContentType {
+	switch self.Context.Response.ContentType {
 	case TEXT_HTML:
-		if templ, err := template.ParseFiles(self.ViewPathDir + self.Response.RespView); err != nil {
+		if templ, err := template.ParseFiles(self.Context.Response.TemplDir + self.Context.Response.RespView); err != nil {
 			return err
-		} else if err := templ.Execute(self.Output, self.Response.RespEntity); err != nil {
+		} else if err := templ.Execute(self.Output, self.Context.Response.RespEntity); err != nil {
 			return err
 		}
 	case TEXT_PLAIN:
-		if result, err := json.Marshal(self.Response.RespEntity); err != nil {
+		if result, err := json.Marshal(self.Context.Response.RespEntity); err != nil {
 			return err
 		} else {
 			self.SetContentType(TEXT_PLAIN)
 			self.Output.Write(result)
 		}
 	case APPLICATION_JSON:
-		if result, err := json.Marshal(self.Response.RespEntity); err != nil {
+		if result, err := json.Marshal(self.Context.Response.RespEntity); err != nil {
 			return err
 		} else {
 			self.SetContentType(APPLICATION_JSON)
@@ -197,27 +196,28 @@ func (self *HttpNode) Render() error {
 	return nil
 }
 
-func (self *HttpNode) Proxy(output, input interface{}, handle func() error) {
+func (self *HttpNode) Proxy(output, input interface{}, handle func(ctx *Context) error) {
 	// 1.初始化请求上下文
-	if err := self.InitContext(output, input); err != nil {
-		self.RenderError(ex.Try{400, "请求无效", err, nil})
+	ob := &HttpNode{}
+	if err := self.InitContext(ob, output, input); err != nil {
+		ob.RenderError(ex.Try{400, "请求无效", err, nil})
 		return
 	}
 	// 2.上下文前置检测方法
-	if err := self.PreHandle(self.CallFunc.PreHandleFunc); err != nil {
-		self.RenderError(err)
+	if err := ob.PreHandle(ob.CallFunc.PreHandleFunc); err != nil {
+		ob.RenderError(err)
 		return
 	}
 	// 3.执行业务方法成功 -> posthandle视图控制
-	result := self.PostHandle(self.CallFunc.PostHandleFunc, handle())
+	result := ob.PostHandle(ob.CallFunc.PostHandleFunc, handle(ob.Context))
 	// 4.执行afterCompletion方法(传递error参数)
-	if err := self.AfterCompletion(self.CallFunc.AfterCompletionFunc, result); err != nil {
-		self.RenderError(err)
+	if err := ob.AfterCompletion(ob.CallFunc.AfterCompletionFunc, result); err != nil {
+		ob.RenderError(err)
 		return
 	}
 }
 
-func (self *HttpNode) BindFuncByRouter(pattern string, handle func() error) {
+func (self *HttpNode) BindFuncByRouter(pattern string, handle func(ctx *Context) error) {
 	http.DefaultServeMux.HandleFunc(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		self.Proxy(w, r, handle)
 	}))

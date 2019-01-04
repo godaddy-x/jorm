@@ -8,9 +8,9 @@ type MyNode struct {
 	node.HttpNode
 }
 
-func (self *MyNode) test() error {
-	return self.Html("/web/index.html", map[string]interface{}{"tewt": 1})
-	//return self.Json( map[string]interface{}{"tewt": 1})
+func (self *MyNode) test(ctx *node.Context) error {
+	return self.Html(ctx, "/web/index.html", map[string]interface{}{"tewt": 1})
+	//return self.Json(ctx, map[string]interface{}{"tewt": 1})
 }
 
 func Run() {
