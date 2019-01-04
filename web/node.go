@@ -13,7 +13,7 @@ const (
 
 type WebNode interface {
 	// 初始化上下文
-	InitContext(output, input interface{}, view ...interface{}) error
+	InitContext(output, input interface{}) error
 	// 获取请求头数据
 	GetHeader(input interface{}) error
 	// 获取请求参数
@@ -21,11 +21,11 @@ type WebNode interface {
 	// 设置响应头格式
 	SetContentType(contentType string)
 	// 核心代理方法
-	Proxy(output, input interface{}, handle func() error, view ...interface{})
+	Proxy(output, input interface{}, handle func() error)
 	// 核心绑定路由方法
-	BindFuncByRouter(handle func() error, pattern string, view ...interface{})
+	BindFuncByRouter(pattern string, handle func() error)
 	// html响应模式
-	Html(data interface{}) error
+	Html(view string, data interface{}) error
 	// json响应模式
 	Json(data interface{}) error
 	// text响应模式
@@ -42,8 +42,9 @@ type WebNode interface {
 	RenderError(err error)
 }
 type Context struct {
-	Header map[string]interface{}
-	Params map[string]interface{}
+	Header  map[string]interface{}
+	Params  map[string]interface{}
+	Subject interface{}
 }
 
 type Response struct {

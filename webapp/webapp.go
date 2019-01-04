@@ -9,11 +9,12 @@ type MyNode struct {
 }
 
 func (self *MyNode) test() error {
-	return self.Html(map[string]interface{}{"tewt": 1})
+	return self.Html("/web/index.html", map[string]interface{}{"tewt": 1})
+	//return self.Json( map[string]interface{}{"tewt": 1})
 }
 
 func Run() {
-	self := &MyNode{}
+	my := &MyNode{}
 	callfunc := &node.CallFunc{
 		PreHandleFunc: func(ctx *node.Context) error {
 			return nil
@@ -26,6 +27,6 @@ func Run() {
 			return err
 		},
 	}
-	self.CallFunc = callfunc
-	self.BindFuncByRouter(self.test, "/test", "/web/index.html")
+	my.CallFunc = callfunc
+	my.BindFuncByRouter("/test", my.test)
 }

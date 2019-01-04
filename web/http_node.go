@@ -3,7 +3,6 @@ package node
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/godaddy-x/jorm/exception"
 	"html/template"
 	"io/ioutil"
@@ -17,6 +16,13 @@ type HttpNode struct {
 	Input       *http.Request
 	Output      http.ResponseWriter
 	ViewPathDir string
+}
+
+type ViewConfig struct {
+	BaseDir  string
+	Suffix   string
+	FileName []string
+	Templ    *template.Template
 }
 
 func (self *HttpNode) GetHeader(input interface{}) error {
@@ -57,15 +63,16 @@ func (self *HttpNode) GetParams(input interface{}) error {
 	return self.CallFunc.GetParams(input)
 }
 
-func (self *HttpNode) Html(data interface{}) error {
+func (self *HttpNode) Html(view string, data interface{}) error {
 	if len(self.ViewPathDir) == 0 {
 		return errors.New("view dir path is nil")
 	}
-	if len(self.Response.RespView) == 0 {
+	if len(view) == 0 {
 		return errors.New("view file path is nil")
 	}
 	self.Response.ContentEncoding = UTF8
 	self.Response.ContentType = TEXT_HTML
+	self.Response.RespView = view
 	self.Response.RespEntity = data
 	return nil
 }
@@ -94,7 +101,7 @@ func (self *HttpNode) SetContentType(contentType string) {
 	self.Output.Header().Set("Content-Type", contentType)
 }
 
-func (self *HttpNode) InitContext(output, input interface{}, view ...interface{}) error {
+func (self *HttpNode) InitContext(output, input interface{}) error {
 	w := output.(http.ResponseWriter)
 	r := input.(*http.Request)
 	context := &Context{}
@@ -104,14 +111,6 @@ func (self *HttpNode) InitContext(output, input interface{}, view ...interface{}
 	}
 	if err := self.GetParams(r); err != nil {
 		return err
-	}
-	if len(view) > 0 {
-		if v0, b := view[0].(string); b && len(v0) > 0 {
-			response.RespView = v0
-			response.ContentType = TEXT_HTML
-		}
-	} else {
-		w.Header().Set("Content-Type", APPLICATION_JSON)
 	}
 	if self.CallFunc == nil {
 		self.CallFunc = &CallFunc{}
@@ -179,27 +178,28 @@ func (self *HttpNode) Render() error {
 			return err
 		}
 	case TEXT_PLAIN:
-		self.SetContentType(TEXT_PLAIN)
 		if result, err := json.Marshal(self.Response.RespEntity); err != nil {
 			return err
 		} else {
-			fmt.Fprint(self.Output, result)
+			self.SetContentType(TEXT_PLAIN)
+			self.Output.Write(result)
 		}
 	case APPLICATION_JSON:
 		if result, err := json.Marshal(self.Response.RespEntity); err != nil {
 			return err
 		} else {
+			self.SetContentType(APPLICATION_JSON)
 			self.Output.Write(result)
 		}
 	default:
-		return errors.New("无效的响应格式")
+		return ex.Try{Code: 400, Msg: "无效的响应格式"}
 	}
 	return nil
 }
 
-func (self *HttpNode) Proxy(output, input interface{}, handle func() error, view ...interface{}) {
+func (self *HttpNode) Proxy(output, input interface{}, handle func() error) {
 	// 1.初始化请求上下文
-	if err := self.InitContext(output, input, view...); err != nil {
+	if err := self.InitContext(output, input); err != nil {
 		self.RenderError(ex.Try{400, "请求无效", err, nil})
 		return
 	}
@@ -217,8 +217,8 @@ func (self *HttpNode) Proxy(output, input interface{}, handle func() error, view
 	}
 }
 
-func (self *HttpNode) BindFuncByRouter(handle func() error, pattern string, view ...interface{}) {
+func (self *HttpNode) BindFuncByRouter(pattern string, handle func() error) {
 	http.DefaultServeMux.HandleFunc(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		self.Proxy(w, r, handle, view...)
+		self.Proxy(w, r, handle)
 	}))
 }
