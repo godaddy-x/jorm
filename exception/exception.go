@@ -12,13 +12,13 @@ import (
  */
 
 const (
-	BIZ     = 900 // 普通业务异常
-	JSON    = 994 // JSON转换异常
-	NUMBER  = 995 // 数值转换异常
-	DATA    = 996 // 数据服务异常
-	CACHE   = 997 // 缓存服务异常
-	SYSTEM  = 998 // 系统级异常
-	UNKNOWN = 999 // 未知异常
+	BIZ     = 100000 // 普通业务异常
+	JSON    = 999994 // JSON转换异常
+	NUMBER  = 999995 // 数值转换异常
+	DATA    = 999996 // 数据服务异常
+	CACHE   = 999997 // 缓存服务异常
+	SYSTEM  = 999998 // 系统级异常
+	UNKNOWN = 999999 // 未知异常
 )
 
 const (
