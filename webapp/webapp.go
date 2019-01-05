@@ -13,9 +13,16 @@ func (self *MyNode) test(ctx *node.Context) error {
 	//return self.Json(ctx, map[string]interface{}{"tewt": 1})
 }
 
-func Run() {
+func StartNode() *MyNode {
 	my := &MyNode{}
-	callfunc := &node.CallFunc{
+	my.Context = &node.Context{
+		Host:       "0.0.0.0:8090",
+		Connection: node.HTTP,
+	}
+	my.SessionManager = &node.CacheSessionManager{}
+	my.OverrideFunc = &node.OverrideFunc{
+		GetHeaderFunc: nil,
+		GetParamsFunc: nil,
 		PreHandleFunc: func(ctx *node.Context) error {
 			return nil
 		},
@@ -26,7 +33,9 @@ func Run() {
 		AfterCompletionFunc: func(ctx *node.Context, resp *node.Response, err error) error {
 			return err
 		},
+		RenderErrorFunc: nil,
 	}
-	my.CallFunc = callfunc
 	my.BindFuncByRouter("/test", my.test)
+	my.StartServer()
+	return my
 }

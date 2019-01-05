@@ -27,6 +27,7 @@ type Authorization struct {
 	AccessTime   int64  `json:"accessTime"`   // 授权时间
 	AccessToken  string `json:"accessToken"`  // 授权Token
 	RefreshToken string `json:"refreshToken"` // 续期Token
+	Signature    string `json:"signature"`    // Token签名
 }
 
 type Header struct {
@@ -112,10 +113,11 @@ func (self *Subject) Generate(secret string, refresh ...bool) (*Authorization, e
 	if len(h_str) == 0 || len(p_str) == 0 {
 		return nil, err
 	}
-	accessToken := util.AddStr(h_str, ".", p_str, ".", util.SHA256(util.AddStr(h_str, ".", p_str, ".", secret)))
+	signature := util.SHA256(util.AddStr(h_str, ".", p_str, ".", secret))
+	accessToken := util.AddStr(h_str, ".", p_str, ".", signature)
 	accessTime := self.Payload.Iat
 	refreshToken := util.SHA256(util.AddStr(accessToken, ".", util.AnyToStr(accessTime), ".", secret))
-	return &Authorization{AccessToken: accessToken, RefreshToken: refreshToken, AccessTime: accessTime}, nil
+	return &Authorization{AccessToken: accessToken, RefreshToken: refreshToken, AccessTime: accessTime, Signature: signature}, nil
 }
 
 // 校验Token

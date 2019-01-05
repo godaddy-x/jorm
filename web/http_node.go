@@ -2,8 +2,8 @@ package node
 
 import (
 	"encoding/json"
-	"errors"
 	"github.com/godaddy-x/jorm/exception"
+	"github.com/godaddy-x/jorm/util"
 	"html/template"
 	"io/ioutil"
 	"net/http"
@@ -26,7 +26,7 @@ type ViewConfig struct {
 }
 
 func (self *HttpNode) GetHeader(input interface{}) error {
-	if self.CallFunc.GetHeader == nil {
+	if self.OverrideFunc.GetHeaderFunc == nil {
 		r := input.(*http.Request)
 		header := map[string]interface{}{}
 		if len(r.Header) > 0 {
@@ -34,13 +34,14 @@ func (self *HttpNode) GetHeader(input interface{}) error {
 				header[k] = v[0]
 			}
 		}
+		self.Context.Header = header
 		return nil
 	}
-	return self.CallFunc.GetHeader(input)
+	return self.OverrideFunc.GetHeaderFunc(input)
 }
 
 func (self *HttpNode) GetParams(input interface{}) error {
-	if self.CallFunc.GetParams == nil {
+	if self.OverrideFunc.GetParamsFunc == nil {
 		r := input.(*http.Request)
 		r.ParseForm()
 		params := map[string]interface{}{}
@@ -58,17 +59,18 @@ func (self *HttpNode) GetParams(input interface{}) error {
 				return err
 			}
 		}
+		self.Context.Params = params
 		return nil
 	}
-	return self.CallFunc.GetParams(input)
+	return self.OverrideFunc.GetParamsFunc(input)
 }
 
 func (self *HttpNode) Html(ctx *Context, view string, data interface{}) error {
 	if len(ctx.Response.TemplDir) == 0 {
-		return errors.New("templ dir path is nil")
+		return util.Error("templ dir path is nil")
 	}
 	if len(view) == 0 {
-		return errors.New("view file path is nil")
+		return util.Error("view file path is nil")
 	}
 	ctx.Response.ContentEncoding = UTF8
 	ctx.Response.ContentType = TEXT_HTML
@@ -105,15 +107,8 @@ func (self *HttpNode) InitContext(ob, output, input interface{}) error {
 	w := output.(http.ResponseWriter)
 	r := input.(*http.Request)
 	o := ob.(*HttpNode)
-	if self.CallFunc == nil {
-		o.CallFunc = &CallFunc{}
-	}
-	o.CallFunc = self.CallFunc
-	if err := o.GetHeader(r); err != nil {
-		return err
-	}
-	if err := o.GetParams(r); err != nil {
-		return err
+	if self.OverrideFunc == nil {
+		o.OverrideFunc = &OverrideFunc{}
 	}
 	if len(self.TemplDir) == 0 {
 		if path, err := os.Getwd(); err != nil {
@@ -122,9 +117,47 @@ func (self *HttpNode) InitContext(ob, output, input interface{}) error {
 			self.TemplDir = path
 		}
 	}
+	o.OverrideFunc = self.OverrideFunc
+	o.SessionManager = self.SessionManager
 	o.Output = w
 	o.Input = r
 	o.Context = &Context{Response: &Response{ContentEncoding: UTF8, ContentType: APPLICATION_JSON, TemplDir: self.TemplDir}}
+	if err := o.GetHeader(r); err != nil {
+		return err
+	}
+	if err := o.GetParams(r); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (self *HttpNode) ValidSession() error {
+	if self.SessionManager == nil {
+		return util.Error("session manager is nil")
+	}
+	sessionId := ""
+	if v, b := self.Context.Header[Global.TokenName]; b {
+		sessionId = v.(string)
+	}
+	if len(sessionId) == 0 {
+		if v, b := self.Context.Params[Global.TokenName]; b {
+			sessionId = v.(string)
+		}
+	}
+	if len(sessionId) == 0 {
+		return nil
+	}
+	session, err := self.SessionManager.ReadSession(sessionId)
+	if err != nil {
+		return util.Error("read session[", sessionId, "] failure")
+	}
+	if session == nil {
+		return nil
+	}
+	if !session.IsValid() {
+		return util.Error("session[", sessionId, "] invalided")
+	}
+	self.Context.Session = session
 	return nil
 }
 
@@ -154,7 +187,7 @@ func (self *HttpNode) AfterCompletion(handle func(ctx *Context, resp *Response, 
 }
 
 func (self *HttpNode) RenderError(err error) {
-	if self.CallFunc.RenderErrorFunc == nil {
+	if self.OverrideFunc.RenderErrorFunc == nil {
 		out := ex.Catch(err)
 		if result, err := json.Marshal(map[string]string{"msg": out.Msg}); err != nil {
 			self.Output.WriteHeader(500)
@@ -164,7 +197,7 @@ func (self *HttpNode) RenderError(err error) {
 			self.Output.Write(result)
 		}
 	} else {
-		self.CallFunc.RenderErrorFunc(err)
+		self.OverrideFunc.RenderErrorFunc(err)
 	}
 }
 
@@ -196,6 +229,12 @@ func (self *HttpNode) Render() error {
 	return nil
 }
 
+func (self *HttpNode) StartServer() {
+	if err := http.ListenAndServe(self.Context.Host, nil); err != nil {
+		panic(err)
+	}
+}
+
 func (self *HttpNode) Proxy(output, input interface{}, handle func(ctx *Context) error) {
 	// 1.初始化请求上下文
 	ob := &HttpNode{}
@@ -203,15 +242,20 @@ func (self *HttpNode) Proxy(output, input interface{}, handle func(ctx *Context)
 		ob.RenderError(ex.Try{400, "请求无效", err, nil})
 		return
 	}
-	// 2.上下文前置检测方法
-	if err := ob.PreHandle(ob.CallFunc.PreHandleFunc); err != nil {
+	// 2.校验会话有效性
+	if err := ob.ValidSession(); err != nil {
+		ob.RenderError(ex.Try{401, "会话校验失败或已失效", err, nil})
+		return
+	}
+	// 3.上下文前置检测方法
+	if err := ob.PreHandle(ob.OverrideFunc.PreHandleFunc); err != nil {
 		ob.RenderError(err)
 		return
 	}
-	// 3.执行业务方法成功 -> posthandle视图控制
-	result := ob.PostHandle(ob.CallFunc.PostHandleFunc, handle(ob.Context))
-	// 4.执行afterCompletion方法(传递error参数)
-	if err := ob.AfterCompletion(ob.CallFunc.AfterCompletionFunc, result); err != nil {
+	// 4.执行业务方法成功 -> posthandle视图控制
+	result := ob.PostHandle(ob.OverrideFunc.PostHandleFunc, handle(ob.Context))
+	// 5.执行afterCompletion方法(传递error参数)
+	if err := ob.AfterCompletion(ob.OverrideFunc.AfterCompletionFunc, result); err != nil {
 		ob.RenderError(err)
 		return
 	}

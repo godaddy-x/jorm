@@ -11,9 +11,19 @@ const (
 	APPLICATION_JSON = "application/json"
 )
 
+var (
+	Global = GlobalConfig{TokenName: "token"}
+)
+
+type GlobalConfig struct {
+	TokenName string
+}
+
 type WebNode interface {
 	// 初始化上下文
 	InitContext(ob, output, input interface{}) error
+	// 校验会话
+	ValidSession() error
 	// 获取请求头数据
 	GetHeader(input interface{}) error
 	// 获取请求参数
@@ -40,12 +50,16 @@ type WebNode interface {
 	Render() error
 	// 异常错误响应方法
 	RenderError(err error)
+	// 启动服务
+	StartServer()
 }
 type Context struct {
-	Header   map[string]interface{}
-	Params   map[string]interface{}
-	Subject  interface{}
-	Response *Response
+	Host       string
+	Connection int
+	Header     map[string]interface{}
+	Params     map[string]interface{}
+	Session    Session
+	Response   *Response
 }
 
 type Response struct {
@@ -56,16 +70,18 @@ type Response struct {
 	RespView        string
 }
 
-type CallFunc struct {
+type OverrideFunc struct {
+	GetHeaderFunc       func(input interface{}) error
+	GetParamsFunc       func(input interface{}) error
 	PreHandleFunc       func(ctx *Context) error
 	PostHandleFunc      func(resp *Response, err error) error
 	AfterCompletionFunc func(ctx *Context, resp *Response, err error) error
 	RenderErrorFunc     func(err error) error
-	GetHeader           func(input interface{}) error
-	GetParams           func(input interface{}) error
+	SessionHandleFunc   func(ctx *Context) error
 }
 
 type DefaultNode struct {
-	Context  *Context
-	CallFunc *CallFunc
+	Context        *Context
+	SessionManager SessionManager
+	OverrideFunc   *OverrideFunc
 }
