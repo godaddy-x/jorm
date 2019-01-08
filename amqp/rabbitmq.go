@@ -7,7 +7,6 @@ import (
 	"github.com/streadway/amqp"
 	"log"
 	"sync"
-	"time"
 )
 
 const (
@@ -196,7 +195,6 @@ func (self *AmqpManager) Publish(data MsgData, dlx ...DLX) error {
 			}
 		}
 		go func() {
-			time.Sleep(time.Duration(3) * time.Second) // 睡眠3秒线程,防止与监听初始化冲突
 			self.Pull(lisdata, call)
 		}()
 		exchange = conf.DlxExchange
