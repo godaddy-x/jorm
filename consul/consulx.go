@@ -223,16 +223,22 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	}
 	services, _ := self.Consulx.Agent().Services()
 	if _, found := services[sarr[0]]; !found {
-		return errors.New(util.AddStr("[", util.GetLocalIP(), "]", "[", sarr[0], "]无可用服务"))
+		e := errors.New(util.AddStr("[", util.GetLocalIP(), "]", "[", sarr[0], "]无可用服务"))
+		log.Println(e)
+		return errors.New("没有找到可用服务")
 	}
 	meta := services[sarr[0]].Meta
 	if len(meta) < 4 {
-		return errors.New(util.AddStr("[", util.GetLocalIP(), "]", "[", sarr[0], "]服务参数异常,请检查..."))
+		e := errors.New(util.AddStr("[", util.GetLocalIP(), "]", "[", sarr[0], "]服务参数异常,请检查..."))
+		log.Println(e)
+		return errors.New("服务参数异常,请检查...")
 	}
 	methods := meta["methods"]
 	s := "," + sarr[1] + ","
 	if !util.HasStr(methods, s) {
-		return errors.New(util.AddStr("[", util.GetLocalIP(), "]", "[", sarr[0], "][", sarr[1], "]无效,请检查..."))
+		e := errors.New(util.AddStr("[", util.GetLocalIP(), "]", "[", sarr[0], "][", sarr[1], "]无效,请检查..."))
+		log.Println(e)
+		return errors.New("服务接口无效,请检查...")
 	}
 	host := meta["host"]
 	protocol := meta["protocol"]
@@ -248,7 +254,8 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	conn, err := net.DialTimeout(protocol, host, time.Second*10)
 	if err != nil {
 		log.Println(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error()))
-		return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error())))
+		self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error())))
+		return errors.New("服务连接失败,请检查...")
 	}
 	encBuf := bufio.NewWriter(conn)
 	codec := &gobClientCodec{conn, gob.NewDecoder(conn), gob.NewEncoder(encBuf), encBuf}
@@ -258,16 +265,16 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	if err1 != nil && err2 != nil {
 		msg := util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err1.Error(), ";", err2.Error())
 		log.Println(msg)
-		return self.rpcMonitor(monitor, errors.New(msg))
+		return self.rpcMonitor(monitor, errors.New(util.AddStr(err1.Error(), " -------- ", err2.Error())))
 	}
 	if err1 != nil {
 		msg := util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err1.Error())
 		log.Println(msg)
-		return self.rpcMonitor(monitor, errors.New(msg))
+		return self.rpcMonitor(monitor, err1)
 	} else if err2 != nil {
 		msg := util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err2.Error())
 		log.Println(msg)
-		return self.rpcMonitor(monitor, errors.New(msg))
+		return self.rpcMonitor(monitor, err2)
 	}
 	//client, err := rpc.DialHTTP(protocol, host)
 	//if err != nil {
