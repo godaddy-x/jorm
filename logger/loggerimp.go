@@ -81,9 +81,10 @@ type logBean struct {
 }
 
 type Config struct {
-	Dir   string
-	Name  string
-	Level string
+	Dir     string
+	Name    string
+	Level   string
+	Console bool
 }
 
 type fileBeanFactory struct {
