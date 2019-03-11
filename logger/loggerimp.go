@@ -80,6 +80,12 @@ type logBean struct {
 	d, i, w, e, f   string //id
 }
 
+type Config struct {
+	Dir   string
+	Name  string
+	Level string
+}
+
 type fileBeanFactory struct {
 	fbs map[string]*fileBean
 	mu  *sync.RWMutex

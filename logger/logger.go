@@ -1,5 +1,7 @@
 package logger
 
+import "strings"
+
 type LEVEL int32
 type UNIT int64
 type _ROLLTYPE int //dailyRolling ,rollingFile
@@ -72,4 +74,22 @@ func IsDebug() bool {
 
 func SetLevelFile(level LEVEL, dir, fileName string) {
 	defaultlog.setLevelFile(level, dir, fileName)
+}
+
+func GetLevel(str string) LEVEL {
+	str = strings.ToLower(str)
+	switch str {
+	case "debug":
+		return DEBUG
+	case "info":
+		return INFO
+	case "warn":
+		return WARN
+	case "error":
+		return ERROR
+	case "fatal":
+		return FATAL
+	default:
+		return ERROR
+	}
 }
