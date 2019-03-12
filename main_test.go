@@ -4,14 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"github.com/godaddy-x/jorm/cache/redis"
+	c2 "github.com/godaddy-x/jorm/cache/mc"
 	"github.com/godaddy-x/jorm/exception"
 	"github.com/godaddy-x/jorm/gauth"
 	"github.com/godaddy-x/jorm/jwt"
 	"github.com/godaddy-x/jorm/sqlc"
 	"github.com/godaddy-x/jorm/sqld"
 	"github.com/godaddy-x/jorm/util"
-	"github.com/godaddy-x/jorm/webapp"
-	"net/http"
 	"testing"
 	"time"
 )
@@ -173,4 +172,31 @@ func TestGA(t *testing.T) {
 	time.Sleep(5 * time.Second)
 	// 校验已有验证码
 	fmt.Println("校验结果: ", gauth.ValidCode(key, rs))
+}
+
+func TestMC(t *testing.T) {
+	mconfig := c2.MemcacheConfig{
+		Host:        "192.168.27.160",
+		Port:        11211,
+		MaxIdle:     500,
+		IdleTimeout: 10,
+	}
+	manager, err := new(c2.MemcacheManager).InitConfig(mconfig)
+	if err != nil {
+		panic(err.Error())
+	}
+	manager, err = manager.Client()
+	if err != nil {
+		panic(err.Error())
+	}
+	for i := 0; i < 10000; i++ {
+		fmt.Println(i, "------")
+		s := ""
+		manager.Put("mytest", "test", 5)
+		fmt.Println(manager.Get("mytest", &s))
+		fmt.Println(s)
+		manager.Del("mytest")
+		fmt.Println(manager.Get("mytest", &s))
+		fmt.Println(s)
+	}
 }
