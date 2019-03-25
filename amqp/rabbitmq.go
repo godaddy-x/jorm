@@ -224,7 +224,7 @@ func (self *AmqpManager) Pull(data LisData, callback func(msg MsgData) (MsgData,
 	}
 	for d := range delivery {
 		body := string(d.Body)
-		if len(body) == 0 {
+		if len(body) == 0 || body == "{}" {
 			d.Ack(false)
 			continue
 		}
