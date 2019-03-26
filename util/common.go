@@ -267,6 +267,12 @@ func AddStr(input ...interface{}) string {
 			rstr.WriteString(v)
 		} else if v, b := s.(error); b {
 			rstr.WriteString(v.Error())
+		} else if v, b := s.(bool); b {
+			if v {
+				rstr.WriteString("true")
+			} else {
+				rstr.WriteString("false")
+			}
 		} else {
 			rstr.WriteString(AnyToStr(s))
 		}

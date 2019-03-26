@@ -3,8 +3,9 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/godaddy-x/jorm/cache/redis"
+	"github.com/godaddy-x/jorm/amqp"
 	c2 "github.com/godaddy-x/jorm/cache/mc"
+	"github.com/godaddy-x/jorm/cache/redis"
 	"github.com/godaddy-x/jorm/exception"
 	"github.com/godaddy-x/jorm/gauth"
 	"github.com/godaddy-x/jorm/jwt"
@@ -199,4 +200,11 @@ func TestMC(t *testing.T) {
 		fmt.Println(manager.Get("mytest", &s))
 		fmt.Println(s)
 	}
+}
+
+func TestMQ(t *testing.T) {
+	url := fmt.Sprintf("amqp://%s:%s@%s:%d/", "admin", "admin", "192.168.27.160", 5672)
+	rabbitmq.NewPullMQ(url, "my.exchange", "direct")
+	rabbitmq.RegisterReceiver("my.queue")
+	rabbitmq.Start()
 }
