@@ -204,7 +204,6 @@ func TestMC(t *testing.T) {
 
 func TestMQ(t *testing.T) {
 	url := fmt.Sprintf("amqp://%s:%s@%s:%d/", "admin", "admin", "192.168.27.160", 5672)
-	rabbitmq.NewPullMQ(url, "my.exchange", "direct")
-	rabbitmq.RegisterReceiver("my.queue")
-	rabbitmq.Start()
+	rabbitmq.NewPullServer(url, "my.exchange", "direct")
+	rabbitmq.StartPullServer()
 }
