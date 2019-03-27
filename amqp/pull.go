@@ -14,14 +14,12 @@ var (
 )
 
 type PullManager struct {
-	mu   sync.Mutex
 	conn *amqp.Connection
 	pull *PullMQ
 }
 
 type PullMQ struct {
-	group     sync.WaitGroup
-	channel   *amqp.Channel
+	mu   sync.Mutex
 	receivers []Receiver
 }
 
@@ -31,14 +29,9 @@ func (self *PullManager) InitConfig(input ...AmqpConfig) *PullManager {
 		if err != nil {
 			panic("RabbitMQ初始化失败: " + err.Error())
 		}
-		channel, err := c.Channel()
-		if err != nil {
-			panic("打开Channel失败: " + err.Error())
-		}
 		pull_mgr := &PullManager{
 			conn: c,
 			pull: &PullMQ{
-				channel:   channel,
 				receivers: make([]Receiver, 0),
 			},
 		}
@@ -61,77 +54,49 @@ func (self *PullManager) Client(dsname ...string) (*PullManager, error) {
 	return manager, nil
 }
 
-func (self *PullManager) StartPullServer(receivers ...Receiver) {
-	for _, v := range receivers {
-		self.pull.receivers = append(self.pull.receivers, v)
-	}
-	self.pull.Start()
-}
-
 func (self *PullManager) AddPullReceiver(receivers ...Receiver) {
 	for _, v := range receivers {
 		self.pull.receivers = append(self.pull.receivers, v)
-		go self.pull.listen(v)
+		go func() {
+			self.pull.start(v)
+		}()
 	}
 }
 
-func (self *PullMQ) prepareExchange(exchange string) error {
-	return self.channel.ExchangeDeclare(exchange, "direct", true, false, false, false, nil)
-}
-
-func (self *PullMQ) prepareQueue(exchange, queue string) error {
-	if _, err := self.channel.QueueDeclare(queue, true, false, false, false, nil); err != nil {
-		return err
-	}
-	if err := self.channel.QueueBind(queue, queue, exchange, false, nil); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (self *PullMQ) run() {
-	for _, receiver := range self.receivers {
-		self.group.Add(1)
-		go self.listen(receiver) // 每个接收者单独启动一个goroutine用来初始化queue并接收消息
-	}
-	self.group.Wait()
+func (self *PullMQ) run(receiver Receiver) {
+	wg := receiver.Group()
+	wg.Add(1)
+	go self.listen(receiver)
+	wg.Wait()
 	log.Error("消费通道意外关闭,需要重新连接")
-	self.channel.Close()
+	receiver.Channel().Close()
 }
 
-func (self *PullMQ) Start() {
+func (self *PullMQ) start(receiver Receiver) {
 	for {
-		self.run()
+		self.run(receiver)
 		time.Sleep(3 * time.Second)
 	}
 }
 
 func (self *PullMQ) listen(receiver Receiver) {
-	defer self.group.Done()
-	if err := self.prepareExchange(receiver.ExchangeName()); err != nil {
+	defer receiver.Group().Done()
+	fmt.Sprintf("队列[%s - %s]消费服务启动成功...", receiver.ExchangeName(), receiver.QueueName())
+	channel := receiver.Channel()
+	exchange := receiver.ExchangeName()
+	queue := receiver.QueueName()
+	//testSend(exchange, queue)
+	if err := self.prepareExchange(channel, exchange); err != nil {
 		receiver.OnError(fmt.Errorf("初始化交换机 [%s] 失败: %s", receiver.ExchangeName(), err.Error()))
 		return
 	}
-	if err := self.prepareQueue(receiver.ExchangeName(), receiver.QueueName()); err != nil {
+	if err := self.prepareQueue(channel, exchange, queue); err != nil {
 		receiver.OnError(fmt.Errorf("绑定队列 [%s] 到交换机失败: %s", receiver.QueueName(), err.Error()))
 		return
 	}
-	//go func() {
-	//	time.Sleep(3 * time.Second)
-	//	for i := 0; i < 10; i++ {
-	//		cli, _ := new(PublishManager).Client()
-	//		v := map[string]interface{}{"test": 1}
-	//		cli.Publish(MsgData{
-	//			Exchange: receiver.ExchangeName(),
-	//			Queue:    receiver.QueueName(),
-	//			Content:  &v,
-	//		})
-	//	}
-	//}()
-	fmt.Sprintf("队列[%s - %s]消费服务启动成功...", receiver.ExchangeName(), receiver.QueueName())
-	self.channel.Qos(1, 0, true)
-	if msgs, err := self.channel.Consume(receiver.QueueName(), "", false, false, false, false, nil); err != nil {
-		receiver.OnError(fmt.Errorf("获取队列 %s 的消费通道失败: %s", receiver.QueueName(), err.Error()))
+	channel.Qos(1, 0, true)
+	if msgs, err := channel.Consume(queue, "", false, false, false, false, nil); err != nil {
+		receiver.OnError(fmt.Errorf("获取队列 %s 的消费通道失败: %s", queue, err.Error()))
 	} else {
 		for msg := range msgs {
 			for !receiver.OnReceive(msg.Body) {
@@ -143,7 +108,38 @@ func (self *PullMQ) listen(receiver Receiver) {
 	}
 }
 
+func (self *PullMQ) prepareExchange(channel *amqp.Channel, exchange string) error {
+	return channel.ExchangeDeclare(exchange, "direct", true, false, false, false, nil)
+}
+
+func (self *PullMQ) prepareQueue(channel *amqp.Channel, exchange, queue string) error {
+	if _, err := channel.QueueDeclare(queue, true, false, false, false, nil); err != nil {
+		return err
+	}
+	if err := channel.QueueBind(queue, queue, exchange, false, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func testSend(exchange, queue string) {
+	go func() {
+		time.Sleep(3 * time.Second)
+		for i := 0; i < 10; i++ {
+			cli, _ := new(PublishManager).Client()
+			v := map[string]interface{}{"test": 1}
+			cli.Publish(MsgData{
+				Exchange: exchange,
+				Queue:    queue,
+				Content:  &v,
+			})
+		}
+	}()
+}
+
 type Receiver interface {
+	Group() sync.WaitGroup
+	Channel() *amqp.Channel
 	ExchangeName() string
 	QueueName() string
 	OnError(err error)
@@ -152,10 +148,20 @@ type Receiver interface {
 
 // 监听对象
 type PullReceiver struct {
+	group    sync.WaitGroup
+	channel  *amqp.Channel
 	Exchange string
 	Queue    string
 	LisData  LisData
 	Callback func(msg MsgData) (MsgData, error)
+}
+
+func (self *PullReceiver) Group() sync.WaitGroup {
+	return self.group
+}
+
+func (self *PullReceiver) Channel() *amqp.Channel {
+	return self.channel
 }
 
 func (self *PullReceiver) ExchangeName() string {

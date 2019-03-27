@@ -71,6 +71,17 @@ func init() {
 	new(sqld.MGOManager).InitConfigAndCache(manager, mongo)
 }
 
+func TestMysql1(t *testing.T) {
+	mysql, err := new(sqld.MysqlManager).Get(sqld.Option{AutoTx: true, DsName: "TEST", CacheSync: true})
+	if err != nil {
+		panic(err)
+	}
+	defer mysql.Close()
+	tx := mysql.Tx
+	tx.Exec("update set xx = xx where xx= xx", nil)
+
+}
+
 func TestMysql(t *testing.T) {
 	db, err := new(sqld.MysqlManager).Get(sqld.Option{AutoTx: true, DsName: "TEST", CacheSync: true})
 	if err != nil {
