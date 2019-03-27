@@ -202,8 +202,33 @@ func TestMC(t *testing.T) {
 	}
 }
 
-func TestMQ(t *testing.T) {
+func TestMQPull(t *testing.T) {
 	url := fmt.Sprintf("amqp://%s:%s@%s:%d/", "admin", "admin", "192.168.27.160", 5672)
-	rabbitmq.NewPullServer(url, "my.exchange", "direct")
-	rabbitmq.StartPullServer()
+	rabbitmq.NewPullServer(url, "my.test.exchange10", "direct")
+	rabbitmq.StartPullServer(
+		&rabbitmq.PullReceiver{
+			Queue: "my.test.queue10",
+		},
+	)
+}
+
+func TestMQPublish(t *testing.T) {
+	input := rabbitmq.AmqpConfig{
+		Username: "admin",
+		Password: "admin",
+		Host:     "192.168.27.160",
+		Port:     5672,
+	}
+	mq := new(rabbitmq.PublishManager).InitConfig(input)
+	for ; ; {
+		cli, _ := mq.Client()
+		v := map[string]interface{}{"test": 1}
+		cli.Publish(rabbitmq.MsgData{
+			Exchange: "my.test.exchange88",
+			Queue:    "my.test.queue88",
+			Content:  &v,
+		})
+	}
+	//v := map[string]interface{}{"test": 1}
+	//rabbitmq.Publish("my.test.queue10", &v)
 }

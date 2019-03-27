@@ -109,13 +109,13 @@ func (self *PullMQ) listen(receiver Receiver) {
 	if err := self.channel.QueueBind(queueName, routerKey, self.exchangeName, false, nil); err != nil {
 		receiver.OnError(fmt.Errorf("绑定队列 [%s - %s] 到交换机失败: %s", queueName, routerKey, err.Error()))
 	}
-	go func() {
-		for i := 0; i < 10; i++ {
-			publish := amqp.Publishing{ContentType: "text/plain", Body: []byte(fmt.Sprintf("[%s]通道测试发送: %d", queueName, i))}
-			self.channel.Publish(self.exchangeName, queueName, false, false, publish)
-			time.Sleep(100 * time.Millisecond)
-		}
-	}()
+	//go func() {
+	//	for i := 0; i < 10; i++ {
+	//		publish := amqp.Publishing{ContentType: "text/plain", Body: []byte(fmt.Sprintf("%s", "{}"))}
+	//		self.channel.Publish(self.exchangeName, queueName, false, false, publish)
+	//		time.Sleep(100 * time.Millisecond)
+	//	}
+	//}()
 	fmt.Sprintf("队列[%s - %s]消费服务启动成功...", self.exchangeName, queueName)
 	self.channel.Qos(1, 0, true)
 	if msgs, err := self.channel.Consume(queueName, "", false, false, false, false, nil); err != nil {
