@@ -225,7 +225,7 @@ func TestMQPull(t *testing.T) {
 	new(rabbitmq.PublishManager).InitConfig(input)
 	new(rabbitmq.PullManager).InitConfig(input)
 	mq, _ := new(rabbitmq.PullManager).Client()
-	go mq.AddPullReceiver(
+	mq.AddPullReceiver(
 		&rabbitmq.PullReceiver{
 			Exchange: exchange,
 			Queue:    queue,

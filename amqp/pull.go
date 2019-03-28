@@ -50,7 +50,7 @@ func (self *PullManager) Client(dsname ...string) (*PullManager, error) {
 
 func (self *PullManager) AddPullReceiver(receivers ...*PullReceiver) {
 	for _, v := range receivers {
-		self.start(v)
+		go self.start(v)
 	}
 }
 
