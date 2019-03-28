@@ -259,7 +259,10 @@ func (self *RDBManager) Save(datas ...interface{}) error {
 				valuePart = append(valuePart, value.String())
 			} else if kind == reflect.Int || kind == reflect.Int8 || kind == reflect.Int16 || kind == reflect.Int32 || kind == reflect.Int64 {
 				rt := value.Int()
-				if kind == reflect.Int64 && rt > 0 && util.ValidDate(field) {
+				if kind == reflect.Int64 && util.ValidDate(field) {
+					if rt < 0 {
+						rt = 0
+					}
 					valuePart = append(valuePart, util.Time2Str(rt))
 				} else {
 					valuePart = append(valuePart, rt)

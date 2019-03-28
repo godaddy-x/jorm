@@ -259,3 +259,7 @@ func TestMQPublish(t *testing.T) {
 		Content:  &v,
 	})
 }
+
+func TestTimeStr(t *testing.T) {
+	fmt.Println(util.Time2Str(0))
+}
