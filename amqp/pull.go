@@ -78,7 +78,7 @@ func (self *PullManager) listen(receiver *PullReceiver) {
 	}
 	exchange := receiver.ExchangeName()
 	queue := receiver.QueueName()
-	fmt.Println(fmt.Sprintf("队列[%s - %s]消费服务启动成功...", exchange, queue))
+	log.Println(fmt.Sprintf("消费队列[%s - %s]服务启动成功...", exchange, queue))
 	// testSend(exchange, queue)
 	if err := self.prepareExchange(channel, exchange); err != nil {
 		receiver.OnError(fmt.Errorf("初始化交换机 [%s] 失败: %s", exchange, err.Error()))
