@@ -225,16 +225,18 @@ func TestMQPull(t *testing.T) {
 	new(rabbitmq.PublishManager).InitConfig(input)
 	new(rabbitmq.PullManager).InitConfig(input)
 	mq, _ := new(rabbitmq.PullManager).Client()
-	mq.StartPullServer(
+	go mq.AddPullReceiver(
 		&rabbitmq.PullReceiver{
 			Exchange: exchange,
 			Queue:    queue,
 			LisData:  rabbitmq.LisData{},
 			Callback: func(msg rabbitmq.MsgData) (rabbitmq.MsgData, error) {
+				fmt.Println(msg)
 				return rabbitmq.MsgData{}, nil
 			},
 		},
 	)
+	time.Sleep(10*time.Second)
 	//mq.AddPullReceiver(&rabbitmq.PullReceiver{
 	//	Exchange: "my.test.exchange1010",
 	//	Queue:    "my.test.queue1010",
