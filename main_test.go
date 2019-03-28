@@ -251,13 +251,11 @@ func TestMQPublish(t *testing.T) {
 		Port:     5672,
 	}
 	mq := new(rabbitmq.PublishManager).InitConfig(input)
-	for ; ; {
-		cli, _ := mq.Client()
-		v := map[string]interface{}{"test": 1}
-		cli.Publish(rabbitmq.MsgData{
-			Exchange: "my.test.exchange88",
-			Queue:    "my.test.queue88",
-			Content:  &v,
-		})
-	}
+	cli, _ := mq.Client()
+	v := map[string]interface{}{"test": 1}
+	cli.Publish(rabbitmq.MsgData{
+		Exchange: "my.test.exchange88",
+		Queue:    "my.test.queue88",
+		Content:  &v,
+	})
 }

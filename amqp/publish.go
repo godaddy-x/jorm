@@ -3,8 +3,10 @@ package rabbitmq
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/godaddy-x/jorm/log"
 	"github.com/streadway/amqp"
 	"sync"
+	"time"
 )
 
 var (
@@ -70,13 +72,31 @@ func (self *PublishManager) Publish(data MsgData) error {
 			self.channels[data.Exchange+data.Queue] = pub
 		}
 	}
-	return pub.sendToMQ(data)
+	i := 0
+	for {
+		i++
+		if b, err := pub.sendToMQ(data); b && err == nil {
+			return nil
+		} else {
+			log.Error("发送MQ数据失败", log.Int("正在尝试次数", i), log.Any("data", data), log.AddError(err))
+			time.Sleep(300 * time.Millisecond)
+		}
+		if i >= 3 {
+			return nil
+		}
+	}
 }
 
-func (self *PublishMQ) sendToMQ(v interface{}) error {
-	b, _ := json.Marshal(v);
+func (self *PublishMQ) sendToMQ(v interface{}) (bool, error) {
+	b, err := json.Marshal(v);
+	if err != nil {
+		return false, err
+	}
 	data := amqp.Publishing{ContentType: "text/plain", Body: b}
-	return self.channel.Publish(self.exchange, self.queue, false, false, data)
+	if err := self.channel.Publish(self.exchange, self.queue, false, false, data); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (self *PublishMQ) prepareExchange() error {

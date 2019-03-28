@@ -3,7 +3,7 @@ package log_test
 import (
 	"errors"
 	"fmt"
-	"github.com/godaddy-x/freego/component/log"
+	"github.com/godaddy-x/jorm/log"
 	"testing"
 )
 
