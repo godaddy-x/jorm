@@ -302,7 +302,7 @@ func (self *ConsulManager) rpcMonitor(monitor MonitorLog, err error) error {
 	if self.Config.Logger == "local" {
 		log.Println(util.ObjectToJson(monitor))
 	} else if self.Config.Logger == "amqp" {
-		if client, err := new(rabbitmq.AmqpManager).Client(); err != nil {
+		if client, err := new(rabbitmq.PublishManager).Client(); err != nil {
 			return err
 		} else if err := client.Publish(rabbitmq.MsgData{Exchange: "stdrpc.exchange", Queue: "stdrpc.monitor", Content: monitor}); err != nil {
 			return err
