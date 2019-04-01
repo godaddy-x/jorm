@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/godaddy-x/jorm/log"
+	"github.com/godaddy-x/jorm/util"
 	"testing"
 )
 
@@ -30,5 +31,6 @@ func TestZap(t *testing.T) {
 	c := []error{a, b}
 	log.Info("log 初始化成功", log.String("test", "w"), log.Any("wo", map[string]interface{}{"yy": 45}), log.AddError(c...))
 	log.Println("test")
+	fmt.Println(util.Time2Str(util.Time()))
 
 }

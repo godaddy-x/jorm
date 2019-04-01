@@ -261,5 +261,6 @@ func TestMQPublish(t *testing.T) {
 }
 
 func TestTimeStr(t *testing.T) {
+	fmt.Println(util.Time2Str(util.Time()))
 	fmt.Println(util.Time2Str(0))
 }
