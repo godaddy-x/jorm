@@ -30,6 +30,7 @@ type ConsulManager struct {
 
 // Consulx配置参数
 type ConsulConfig struct {
+	DsName       string
 	Node         string
 	Host         string
 	Domain       string
@@ -76,7 +77,11 @@ func (self *ConsulManager) InitConfig(input ...ConsulConfig) (*ConsulManager, er
 		}
 		result.Node = conf.Node
 		manager.Config = result
-		consul_sessions[conf.Host] = manager
+		if len(result.DsName) == 0 {
+			consul_sessions[conf.Host] = manager
+		} else {
+			consul_sessions[result.DsName] = manager
+		}
 	}
 	if len(consul_sessions) == 0 {
 		panic("consul连接初始化失败: 数据源为0")
@@ -167,14 +172,6 @@ func (self *ConsulManager) AddRegistration(name string, iface interface{}) {
 
 // 开启并监听服务
 func (self *ConsulManager) StartListenAndServe() {
-	//rpc.HandleHTTP()
-	//l, e := net.Listen(self.Config.Protocol, util.AddStr(":", util.AnyToStr(self.Config.ListenProt)))
-	//if e != nil {
-	//	panic("Consul监听服务异常: " + e.Error())
-	//}
-	//go http.Serve(l, nil)
-	//http.HandleFunc("/check", self.healthCheck)
-	//http.ListenAndServe(fmt.Sprintf(":%d", self.Config.CheckPort), nil)
 	l, e := net.Listen(self.Config.Protocol, util.AddStr(":", util.AnyToStr(self.Config.ListenProt)))
 	if e != nil {
 		panic("Consul监听服务异常: " + e.Error())
@@ -276,19 +273,6 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 		log.Println(msg)
 		return self.rpcMonitor(monitor, err2)
 	}
-	//client, err := rpc.DialHTTP(protocol, host)
-	//if err != nil {
-	//	log.Println(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error()))
-	//	return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error())))
-	//}
-	//defer client.Close()
-	//if err := client.Call(srv, args, reply); err != nil {
-	//	return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err.Error())))
-	//}
-	//call := <-client.Go(srv, args, reply, nil).Done
-	//if call.Error != nil {
-	//	return self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]访问失败: ", call.Error.Error())))
-	//}
 	return self.rpcMonitor(monitor, nil)
 }
 
