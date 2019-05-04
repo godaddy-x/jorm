@@ -1068,7 +1068,7 @@ func (self *RDBManager) Close() error {
 			}
 		}
 	}
-	if self.CacheSync && len(self.CacheObject) > 0 {
+	if self.Errors == nil && len(self.Errors) == 0 && self.CacheSync && len(self.CacheObject) > 0 {
 		for e := range self.CacheObject {
 			if err := self.mongoSyncData(self.CacheObject[e]); err != nil {
 				log.Print(err.Error())
