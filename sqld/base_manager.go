@@ -1061,6 +1061,7 @@ func (self *RDBManager) Close() error {
 			if err := self.Tx.Rollback(); err != nil {
 				log.Println("事务回滚失败: ", err.Error())
 			}
+			return nil
 		} else {
 			if err := self.Tx.Commit(); err != nil {
 				log.Println("事务提交失败: ", err.Error())
