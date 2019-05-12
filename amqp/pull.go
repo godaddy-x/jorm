@@ -88,7 +88,7 @@ func (self *PullManager) listen(receiver *PullReceiver) {
 		receiver.OnError(fmt.Errorf("绑定队列 [%s] 到交换机失败: %s", queue, err.Error()))
 		return
 	}
-	channel.Qos(1, 0, true)
+	channel.Qos(10, 10, true)
 	if msgs, err := channel.Consume(queue, "", false, false, false, false, nil); err != nil {
 		receiver.OnError(fmt.Errorf("获取队列 %s 的消费通道失败: %s", queue, err.Error()))
 	} else {
