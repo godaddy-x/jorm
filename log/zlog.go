@@ -154,7 +154,6 @@ func Debug(msg string, start int64, fields ...zap.Field) {
 		fields = append(fields, zap.Int64("cost", util.Time()-start))
 	}
 	zapLog.l.Debug(msg, fields...)
-	zapLog.l.Debug(msg, fields...)
 }
 
 // info
@@ -162,7 +161,6 @@ func Info(msg string, start int64, fields ...zap.Field) {
 	if start > 0 {
 		fields = append(fields, zap.Int64("cost", util.Time()-start))
 	}
-	zapLog.l.Debug(msg, fields...)
 	zapLog.l.Info(msg, fields...)
 }
 
@@ -171,7 +169,6 @@ func Warn(msg string, start int64, fields ...zap.Field) {
 	if start > 0 {
 		fields = append(fields, zap.Int64("cost", util.Time()-start))
 	}
-	zapLog.l.Debug(msg, fields...)
 	zapLog.l.Warn(msg, fields...)
 }
 
@@ -180,7 +177,6 @@ func Error(msg string, start int64, fields ...zap.Field) {
 	if start > 0 {
 		fields = append(fields, zap.Int64("cost", util.Time()-start))
 	}
-	zapLog.l.Debug(msg, fields...)
 	zapLog.l.Error(msg, fields...)
 }
 
@@ -189,7 +185,6 @@ func DPanic(msg string, start int64, fields ...zap.Field) {
 	if start > 0 {
 		fields = append(fields, zap.Int64("cost", util.Time()-start))
 	}
-	zapLog.l.Debug(msg, fields...)
 	zapLog.l.DPanic(msg, fields...)
 }
 
@@ -198,7 +193,6 @@ func Panic(msg string, start int64, fields ...zap.Field) {
 	if start > 0 {
 		fields = append(fields, zap.Int64("cost", util.Time()-start))
 	}
-	zapLog.l.Debug(msg, fields...)
 	zapLog.l.Panic(msg, fields...)
 }
 
@@ -207,7 +201,6 @@ func Fatal(msg string, start int64, fields ...zap.Field) {
 	if start > 0 {
 		fields = append(fields, zap.Int64("cost", util.Time()-start))
 	}
-	zapLog.l.Debug(msg, fields...)
 	zapLog.l.Fatal(msg, fields...)
 }
 

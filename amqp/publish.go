@@ -78,7 +78,7 @@ func (self *PublishManager) Publish(data MsgData) error {
 		if b, err := pub.sendToMQ(data); b && err == nil {
 			return nil
 		} else {
-			log.Error("发送MQ数据失败", log.Int("正在尝试次数", i), log.Any("data", data), log.AddError(err))
+			log.Error("发送MQ数据失败", 0, log.Int("正在尝试次数", i), log.Any("data", data), log.AddError(err))
 			time.Sleep(300 * time.Millisecond)
 		}
 		if i >= 3 {

@@ -21,7 +21,7 @@ func TestZap(t *testing.T) {
 		Console:    true,
 		FileConfig: file,
 		Callfunc: func(b []byte) error {
-			fmt.Println(string(b))
+			// fmt.Println(string(b))
 			return nil
 		},
 	}
