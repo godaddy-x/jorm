@@ -1,6 +1,7 @@
 package log
 
 import (
+	"github.com/godaddy-x/jorm/util"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -148,37 +149,65 @@ func buildLog(config *ZapConfig) *zap.Logger {
 }
 
 // debug
-func Debug(msg string, fields ...zap.Field) {
+func Debug(msg string, start int64, fields ...zap.Field) {
+	if start > 0 {
+		fields = append(fields, zap.Int64("cost", util.Time()-start))
+	}
+	zapLog.l.Debug(msg, fields...)
 	zapLog.l.Debug(msg, fields...)
 }
 
 // info
-func Info(msg string, fields ...zap.Field) {
+func Info(msg string, start int64, fields ...zap.Field) {
+	if start > 0 {
+		fields = append(fields, zap.Int64("cost", util.Time()-start))
+	}
+	zapLog.l.Debug(msg, fields...)
 	zapLog.l.Info(msg, fields...)
 }
 
 // warn
-func Warn(msg string, fields ...zap.Field) {
+func Warn(msg string, start int64, fields ...zap.Field) {
+	if start > 0 {
+		fields = append(fields, zap.Int64("cost", util.Time()-start))
+	}
+	zapLog.l.Debug(msg, fields...)
 	zapLog.l.Warn(msg, fields...)
 }
 
 // error
-func Error(msg string, fields ...zap.Field) {
+func Error(msg string, start int64, fields ...zap.Field) {
+	if start > 0 {
+		fields = append(fields, zap.Int64("cost", util.Time()-start))
+	}
+	zapLog.l.Debug(msg, fields...)
 	zapLog.l.Error(msg, fields...)
 }
 
 // dpanic
-func DPanic(msg string, fields ...zap.Field) {
+func DPanic(msg string, start int64, fields ...zap.Field) {
+	if start > 0 {
+		fields = append(fields, zap.Int64("cost", util.Time()-start))
+	}
+	zapLog.l.Debug(msg, fields...)
 	zapLog.l.DPanic(msg, fields...)
 }
 
 // panic
-func Panic(msg string, fields ...zap.Field) {
+func Panic(msg string, start int64, fields ...zap.Field) {
+	if start > 0 {
+		fields = append(fields, zap.Int64("cost", util.Time()-start))
+	}
+	zapLog.l.Debug(msg, fields...)
 	zapLog.l.Panic(msg, fields...)
 }
 
 // fatal
-func Fatal(msg string, fields ...zap.Field) {
+func Fatal(msg string, start int64, fields ...zap.Field) {
+	if start > 0 {
+		fields = append(fields, zap.Int64("cost", util.Time()-start))
+	}
+	zapLog.l.Debug(msg, fields...)
 	zapLog.l.Fatal(msg, fields...)
 }
 
