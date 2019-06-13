@@ -1,20 +1,17 @@
 package rate
 
 import (
-	"github.com/godaddy-x/freego/cache"
+	"github.com/godaddy-x/jorm/cache"
 	"sync"
 )
 
 type RateLimiter struct {
 	mu    sync.Mutex
-	cache cache.ICache
+	cache *cache.LocalMapManager
 }
 
-func NewLocalLimiter(c cache.ICache) *RateLimiter {
-	if c == nil {
-		return &RateLimiter{cache: new(cache.LocalMapManager).NewCache(30, 3)}
-	}
-	return &RateLimiter{cache: c}
+func NewLocalLimiter() *RateLimiter {
+	return &RateLimiter{cache: cache.NewLocalCache(30, 10)}
 }
 
 // key=过滤关键词 limit=速率 bucket=容量 expire=过期时间/秒
@@ -22,7 +19,7 @@ func (self *RateLimiter) getLimiter(key string, limit Limit, bucket int, expire 
 	self.mu.Lock()
 	defer self.mu.Unlock()
 	var limiter *Limiter
-	if v, b, _ := self.cache.Get(key, nil); b {
+	if v, b, _ := self.cache.GetBy(key, nil); b {
 		limiter = v.(*Limiter)
 	} else {
 		limiter = NewLimiter(limit, bucket)
