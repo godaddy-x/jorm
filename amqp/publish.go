@@ -22,6 +22,7 @@ type PublishManager struct {
 type PublishMQ struct {
 	channel  *amqp.Channel
 	mu       sync.Mutex
+	kind     string
 	exchange string
 	queue    string
 }
@@ -66,7 +67,11 @@ func (self *PublishManager) Publish(data MsgData) error {
 			if err != nil {
 				return err
 			}
-			pub = &PublishMQ{channel: channel, exchange: data.Exchange, queue: data.Queue,}
+			kind := data.Kind
+			if len(kind) == 0 {
+				kind = DIRECT
+			}
+			pub = &PublishMQ{channel: channel, exchange: data.Exchange, queue: data.Queue, kind: kind}
 			pub.prepareExchange()
 			pub.prepareQueue()
 			self.channels[data.Exchange+data.Queue] = pub
@@ -100,7 +105,7 @@ func (self *PublishMQ) sendToMQ(v interface{}) (bool, error) {
 }
 
 func (self *PublishMQ) prepareExchange() error {
-	return self.channel.ExchangeDeclare(self.exchange, "direct", true, false, false, false, nil)
+	return self.channel.ExchangeDeclare(self.exchange, self.kind, true, false, false, false, nil)
 }
 
 func (self *PublishMQ) prepareQueue() error {

@@ -12,6 +12,7 @@ import (
 const (
 	MASTER        = "MASTER"
 	DIRECT        = "direct"
+	TOPIC         = "topic"
 	PrefetchCount = 50
 )
 
