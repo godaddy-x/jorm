@@ -101,7 +101,7 @@ func (self *PullManager) listen(receiver *PullReceiver) {
 		for msg := range msgs {
 			for !receiver.OnReceive(msg.Body) {
 				fmt.Println("receiver 数据处理失败，将要重试")
-				time.Sleep(1 * time.Second)
+				time.Sleep(2500 * time.Millisecond)
 			}
 			msg.Ack(false)
 		}
