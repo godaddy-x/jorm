@@ -81,7 +81,7 @@ func (self *PullManager) listen(receiver *PullReceiver) {
 	queue := receiver.QueueName()
 	log.Println(fmt.Sprintf("消费队列[%s - %s]服务启动成功...", exchange, queue))
 	// testSend(exchange, queue)
-	if err := self.prepareExchange(channel, exchange, receiver.Kind); err != nil {
+	if err := self.prepareExchange(channel, exchange); err != nil {
 		receiver.OnError(fmt.Errorf("初始化交换机 [%s] 失败: %s", exchange, err.Error()))
 		return
 	}
@@ -108,11 +108,8 @@ func (self *PullManager) listen(receiver *PullReceiver) {
 	}
 }
 
-func (self *PullManager) prepareExchange(channel *amqp.Channel, exchange, kind string) error {
-	if len(kind) == 0 {
-		kind = DIRECT
-	}
-	return channel.ExchangeDeclare(exchange, kind, true, false, false, false, nil)
+func (self *PullManager) prepareExchange(channel *amqp.Channel, exchange string) error {
+	return channel.ExchangeDeclare(exchange, "direct", true, false, false, false, nil)
 }
 
 func (self *PullManager) prepareQueue(channel *amqp.Channel, exchange, queue string) error {
@@ -140,6 +137,15 @@ func testSend(exchange, queue string) {
 	}()
 }
 
+//type Receiver interface {
+//	Group() *sync.WaitGroup
+//	Channel() *amqp.Channel
+//	ExchangeName() string
+//	QueueName() string
+//	OnError(err error)
+//	OnReceive(b []byte) bool
+//}
+
 func (self *PullReceiver) Channel() *amqp.Channel {
 	return self.channel
 }
@@ -160,7 +166,6 @@ func (self *PullReceiver) OnError(err error) {
 type PullReceiver struct {
 	group    sync.WaitGroup
 	channel  *amqp.Channel
-	Kind     string
 	Exchange string
 	Queue    string
 	LisData  LisData
