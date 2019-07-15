@@ -136,12 +136,13 @@ func (self *ConsulManager) ReadJsonConfig(node string, result interface{}) error
 func (self *ConsulManager) AddRegistration(name string, iface interface{}) {
 	tof := reflect.TypeOf(iface)
 	vof := reflect.ValueOf(iface)
-	sname := reflect.Indirect(vof).Type().Name()
 	registration := new(consulapi.AgentServiceRegistration)
 	ip := util.GetLocalIP()
 	if ip == "" {
 		panic("内网IP读取失败,请检查...")
 	}
+	orname := reflect.Indirect(vof).Type().Name()
+	sname := orname
 	methods := ","
 	for m := 0; m < tof.NumMethod(); m++ {
 		method := tof.Method(m)
@@ -153,7 +154,7 @@ func (self *ConsulManager) AddRegistration(name string, iface interface{}) {
 	}
 	sname = util.AddStr(ip, "/", sname)
 	registration.ID = sname
-	registration.Name = sname
+	registration.Name = util.AddStr(ip, "/", orname)
 	registration.Tags = []string{name}
 	registration.Address = ip
 	registration.Port = self.Config.RpcPort
@@ -234,7 +235,7 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	}
 	srvs := make([]*consulapi.AgentService, 0)
 	for _, v := range services {
-		if strings.HasSuffix(v.ID, srvName) {
+		if util.HasStr(v.ID, util.AddStr("/", srvName, "/")) {
 			srvs = append(srvs, v)
 		}
 	}
