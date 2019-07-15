@@ -150,7 +150,7 @@ func (self *ConsulManager) AddRegistration(name string, iface interface{}) {
 	if ip == "" {
 		panic("内网IP读取失败,请检查...")
 	}
-	sname = util.AddStr("jorm://", ip, "/", sname)
+	sname = util.AddStr(ip, "/", sname)
 	registration.ID = sname
 	registration.Name = sname
 	registration.Tags = []string{name}
