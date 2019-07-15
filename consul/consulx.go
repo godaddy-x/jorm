@@ -146,7 +146,7 @@ func (self *ConsulManager) AddRegistration(name string, iface interface{}) {
 	methods := ","
 	for m := 0; m < tof.NumMethod(); m++ {
 		method := tof.Method(m)
-		methods = util.AddStr(method.Name, ",")
+		methods = util.AddStr(methods, method.Name, ",")
 		sname = util.AddStr(sname, "/", method.Name)
 	}
 	if len(methods) == 0 {
