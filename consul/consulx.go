@@ -137,18 +137,19 @@ func (self *ConsulManager) AddRegistration(name string, iface interface{}) {
 	tof := reflect.TypeOf(iface)
 	vof := reflect.ValueOf(iface)
 	sname := reflect.Indirect(vof).Type().Name()
-	methods := ","
-	for m := 0; m < tof.NumMethod(); m++ {
-		method := tof.Method(m)
-		methods += method.Name + ","
-	}
-	if len(methods) == 0 {
-		panic(util.AddStr("服务对象[", sname, "]尚未有方法..."))
-	}
 	registration := new(consulapi.AgentServiceRegistration)
 	ip := util.GetLocalIP()
 	if ip == "" {
 		panic("内网IP读取失败,请检查...")
+	}
+	methods := ","
+	for m := 0; m < tof.NumMethod(); m++ {
+		method := tof.Method(m)
+		methods = util.AddStr(method.Name, ",")
+		sname = util.AddStr(sname, "/", method.Name)
+	}
+	if len(methods) == 0 {
+		panic(util.AddStr("服务对象[", sname, "]尚未有方法..."))
 	}
 	sname = util.AddStr(ip, "/", sname)
 	registration.ID = sname
