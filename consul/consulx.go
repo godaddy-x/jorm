@@ -84,7 +84,7 @@ func (self *ConsulManager) InitConfig(input ...ConsulConfig) (*ConsulManager, er
 		}
 	}
 	if len(consul_sessions) == 0 {
-		panic("consul连接初始化失败: 数据源为0")
+		log.Println("consul连接初始化失败: 数据源为0")
 	}
 	return self, nil
 }
@@ -117,7 +117,7 @@ func (self *ConsulManager) GetKV(key string, consulx ...*consulapi.Client) ([]by
 	if err != nil {
 		return nil, util.Error("Consul配置数据[", key, "]读取异常,请检查...")
 	}
-	if k == nil || k.Value == nil || len(k.Value) <= 0 {
+	if k == nil || k.Value == nil || len(k.Value) == 0 {
 		return nil, util.Error("Consul配置数据[", key, "]读取为空,请检查...")
 	}
 	return k.Value, nil
@@ -142,17 +142,18 @@ func (self *ConsulManager) AddRegistration(name string, iface interface{}) {
 		method := tof.Method(m)
 		methods += method.Name + ","
 	}
-	if len(methods) <= 0 {
+	if len(methods) == 0 {
 		panic(util.AddStr("服务对象[", sname, "]尚未有方法..."))
 	}
 	registration := new(consulapi.AgentServiceRegistration)
-	registration.ID = sname
-	registration.Name = sname
-	registration.Tags = []string{name}
 	ip := util.GetLocalIP()
 	if ip == "" {
 		panic("内网IP读取失败,请检查...")
 	}
+	sname = util.AddStr(ip, "jorm://", ip, "/", sname)
+	registration.ID = sname
+	registration.Name = sname
+	registration.Tags = []string{name}
 	registration.Address = ip
 	registration.Port = self.Config.RpcPort
 	meta := make(map[string]string)
@@ -209,37 +210,49 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 		return errors.New("类名+方法名不能为空")
 	}
 	sarr := strings.Split(srv, ".")
-	if len(sarr) != 2 || len(sarr[0]) <= 0 || len(sarr[1]) <= 0 {
-		return errors.New("类名+方法名格式有误")
+	if len(sarr) != 2 {
+		return errors.New("类名.方法名格式有误")
+	}
+	srvName := sarr[0]
+	methodName := sarr[1]
+	if len(srvName) == 0 || len(methodName) == 0 {
+		return errors.New("类名或方法名不能为空")
 	}
 	monitor := MonitorLog{
 		ConsulHost:  self.Config.Host,
-		ServiceName: sarr[0],
-		MethodName:  sarr[1],
+		ServiceName: srvName,
+		MethodName:  methodName,
 		BeginTime:   util.Time(),
 	}
-	services, _ := self.Consulx.Agent().Services()
-	if _, found := services[sarr[0]]; !found {
-		e := errors.New(util.AddStr("[", util.GetLocalIP(), "]", "[", sarr[0], "]无可用服务"))
-		log.Println(e)
-		return errors.New("没有找到可用服务")
+	services, err := self.Consulx.Agent().Services()
+	if err != nil {
+		return errors.New(util.AddStr("读取RPC服务失败: ", err.Error()))
 	}
-	meta := services[sarr[0]].Meta
+	if len(services) == 0 {
+		return errors.New("没有找到任何RPC服务")
+	}
+	srvs := make([]*consulapi.AgentService, 0)
+	for _, v := range services {
+		if strings.HasSuffix(v.ID, srvName) {
+			srvs = append(srvs, v)
+		}
+	}
+	if len(srvs) == 0 {
+		return errors.New(util.AddStr("[", srvName, "]无可用服务"))
+	}
+	agent := srvs[0]
+	meta := agent.Meta
 	if len(meta) < 4 {
-		e := errors.New(util.AddStr("[", util.GetLocalIP(), "]", "[", sarr[0], "]服务参数异常,请检查..."))
-		log.Println(e)
-		return errors.New("服务参数异常,请检查...")
+		return errors.New(util.AddStr("[[", agent.ID, "]服务参数异常,请检查..."))
 	}
 	methods := meta["methods"]
-	s := "," + sarr[1] + ","
+	s := "," + methodName + ","
 	if !util.HasStr(methods, s) {
-		e := errors.New(util.AddStr("[", util.GetLocalIP(), "]", "[", sarr[0], "][", sarr[1], "]无效,请检查..."))
-		log.Println(e)
-		return errors.New("服务接口无效,请检查...")
+		return errors.New(util.AddStr("[", agent.ID, "][", methodName, "]无效,请检查..."))
 	}
 	host := meta["host"]
 	protocol := meta["protocol"]
-	if len(host) <= 0 || len(protocol) <= 0 {
+	if len(host) == 0 || len(protocol) == 0 {
 		return errors.New("meta参数异常")
 	} else {
 		s := strings.Split(host, ":")
@@ -250,9 +263,10 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	}
 	conn, err := net.DialTimeout(protocol, host, time.Second*10)
 	if err != nil {
-		log.Println(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error()))
-		self.rpcMonitor(monitor, errors.New(util.AddStr("[", host, "]", "[", srv, "]连接失败: ", err.Error())))
-		return errors.New("服务连接失败,请检查...")
+		log.Println(util.AddStr("[", agent.ID, "][", host, "]", "[", srv, "]连接失败: ", err.Error()))
+		err := errors.New(util.AddStr("[", agent.ID, "][", host, "]", "[", srv, "]连接失败: ", err.Error()))
+		self.rpcMonitor(monitor, err)
+		return err
 	}
 	encBuf := bufio.NewWriter(conn)
 	codec := &gobClientCodec{conn, gob.NewDecoder(conn), gob.NewEncoder(encBuf), encBuf}
