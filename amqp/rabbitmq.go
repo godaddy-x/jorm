@@ -36,13 +36,14 @@ type AmqpConfig struct {
 
 // Amqp消息参数
 type MsgData struct {
-	Exchange string      `json:"exchange"`
-	Queue    string      `json:"queue"`
-	Kind     string      `json:"kind"`
-	Content  interface{} `json:"content"`
-	Type     int64       `json:"type"`
-	Delay    int64       `json:"delay"`
-	Retries  int64       `json:"retries"`
+	Exchange  string      `json:"exchange"`
+	Queue     string      `json:"queue"`
+	Kind      string      `json:"kind"`
+	Content   interface{} `json:"content"`
+	Type      int64       `json:"type"`
+	Delay     int64       `json:"delay"`
+	Retries   int64       `json:"retries"`
+	Signature string      `json:"signature"`
 }
 
 // Amqp延迟发送配置
