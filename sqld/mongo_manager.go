@@ -125,6 +125,7 @@ func (self *MGOManager) buildByConfig(manager cache.ICache, input ...MGOConfig) 
 		}
 		session.SetSocketTimeout(3 * time.Minute)
 		session.SetMode(mgo.Monotonic, true)
+		session.SetSyncTimeout(0)
 		if len(conf.DsName) == 0 {
 			self.DsName = MASTER
 		} else {
