@@ -758,6 +758,231 @@ func (self *RDBManager) FindOne(cnd *sqlc.Cnd, data interface{}) error {
 	return nil
 }
 
+func (self *RDBManager) MapperOne(rows *sql.Rows, model interface{}) error {
+	if err := mapperObject(rows, model, nil, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (self *RDBManager) MapperList(rows *sql.Rows, model interface{}, resultv interface{}) error {
+	if err := mapperObject(rows, model, resultv, false); err != nil {
+		return err
+	}
+	return nil
+}
+
+func mapperObject(rows *sql.Rows, model interface{}, resultv interface{}, one bool) error {
+	defer rows.Close()
+	col, err := rows.Columns()
+	if err != nil {
+		return err
+	}
+	data := make([][][]byte, 0)
+	for rows.Next() {
+		result := make([][]byte, len(col))
+		dest := make([]interface{}, len(col))
+		for i, _ := range result {
+			dest[i] = &result[i]
+		}
+		if err := rows.Scan(dest...); err != nil {
+			return err
+		}
+		data = append(data, result)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	tof := util.TypeOf(model)
+	if tof.Kind() != reflect.Struct && tof.Kind() != reflect.Ptr {
+		return util.Error("ORM对象类型必须为struct或ptr")
+	}
+	valList := make([]map[string]interface{}, 0, len(data))
+	typList := make([]FieldKeyKind, 0, len(col))
+	for _, v := range col {
+		for i := 0; i < tof.NumField(); i++ {
+			field := tof.Field(i)
+			if v == field.Tag.Get(sqlc.Json) {
+				typList = append(typList,
+					FieldKeyKind{
+						Name:   v,
+						Kind:   field.Type.String(),
+						IsDate: util.ValidDate(field),
+					})
+			}
+		}
+	}
+	for _, v := range data {
+		result := map[string]interface{}{}
+		for i, v1 := range v {
+			typ := typList[i]
+			f := typ.Name
+			kind := typ.Kind
+			vs := string(v1)
+			if len(vs) == 0 {
+				continue
+			}
+			if kind == "int" {
+				if i0, err := util.StrToInt(vs); err != nil {
+					return util.Error("对象字段[", f, "]转换int失败")
+				} else {
+					result[f] = i0
+				}
+			} else if kind == "int8" {
+				if i8, err := util.StrToInt8(string(vs)); err != nil {
+					return util.Error("对象字段[", f, "]转换int8失败")
+				} else {
+					result[f] = i8
+				}
+			} else if kind == "int16" {
+				if i16, err := util.StrToInt16(string(vs)); err != nil {
+					return util.Error("对象字段[", f, "]转换int16失败")
+				} else {
+					result[f] = i16
+				}
+			} else if kind == "int32" {
+				if i32, err := util.StrToInt32(string(vs)); err != nil {
+					return util.Error("对象字段[", f, "]转换int32失败")
+				} else {
+					result[f] = i32
+				}
+			} else if kind == "int64" {
+				if typ.IsDate {
+					if vs == "0000-00-00 00:00:00" {
+						result[f] = 0
+					} else {
+						if i64, err := util.Str2Time(vs); err != nil {
+							return util.Error("对象字段[", f, "]转换int64失败: ", err.Error())
+						} else {
+							result[f] = i64
+						}
+					}
+				} else {
+					if i64, err := util.StrToInt64(vs); err != nil {
+						return util.Error("对象字段[", f, "]转换int64失败")
+					} else {
+						result[f] = i64
+					}
+				}
+			} else if kind == "string" {
+				result[f] = vs
+			} else if kind == "[]string" {
+				array := make([]string, 0)
+				if err := util.JsonToObject(vs, &array); err != nil {
+					return err
+				}
+				result[f] = array
+			} else if kind == "[]int" {
+				array := make([]int, 0)
+				if err := util.JsonToObject(vs, &array); err != nil {
+					return err
+				}
+				result[f] = array
+			} else if kind == "[]int8" {
+				array := make([]int8, 0)
+				if err := util.JsonToObject(vs, &array); err != nil {
+					return err
+				}
+				result[f] = array
+			} else if kind == "[]int16" {
+				array := make([]int16, 0)
+				if err := util.JsonToObject(vs, &array); err != nil {
+					return err
+				}
+				result[f] = array
+			} else if kind == "[]int32" {
+				array := make([]int32, 0)
+				if err := util.JsonToObject(vs, &array); err != nil {
+					return err
+				}
+				result[f] = array
+			} else if kind == "[]int64" {
+				array := make([]int64, 0)
+				if err := util.JsonToObject(vs, &array); err != nil {
+					return err
+				}
+				result[f] = array
+			} else if kind == "[]interface {}" {
+				array := make([]interface{}, 0)
+				if err := util.JsonToObject(vs, &array); err != nil {
+					return err
+				}
+				result[f] = array
+			} else if kind == "[]string" {
+				array := make([]string, 0)
+				if err := util.JsonToObject(vs, &array); err != nil {
+					return err
+				}
+				result[f] = array
+			} else if kind == "map[string]interface {}" {
+				mmp := make(map[string]interface{})
+				if err := util.JsonToObject(vs, &mmp); err != nil {
+					return err
+				}
+				result[f] = mmp
+			} else if kind == "map[string]int" {
+				mmp := make(map[string]int)
+				if err := util.JsonToObject(vs, &mmp); err != nil {
+					return err
+				}
+				result[f] = mmp
+			} else if kind == "map[string]int8" {
+				mmp := make(map[string]int8)
+				if err := util.JsonToObject(vs, &mmp); err != nil {
+					return err
+				}
+				result[f] = mmp
+			} else if kind == "map[string]int16" {
+				mmp := make(map[string]int16)
+				if err := util.JsonToObject(vs, &mmp); err != nil {
+					return err
+				}
+				result[f] = mmp
+			} else if kind == "map[string]int32" {
+				mmp := make(map[string]int32)
+				if err := util.JsonToObject(vs, &mmp); err != nil {
+					return err
+				}
+				result[f] = mmp
+			} else if kind == "map[string]int64" {
+				mmp := make(map[string]int64)
+				if err := util.JsonToObject(vs, &mmp); err != nil {
+					return err
+				}
+				result[f] = mmp
+			} else if kind == "map[string]string" {
+				mmp := make(map[string]string)
+				if err := util.JsonToObject(vs, &mmp); err != nil {
+					return err
+				}
+				result[f] = mmp
+			} else {
+				return util.Error("对象字段[", f, "]转换失败([", kind, "]类型不支持)")
+			}
+		}
+		valList = append(valList, result)
+	}
+	if len(valList) == 0 {
+		return nil
+	}
+	if one {
+		if err := util.JsonToAny(valList[0], model); err != nil {
+			return err
+		}
+	} else {
+		if err := util.JsonToAny(valList, resultv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type FieldKeyKind struct {
+	Name   string
+	Kind   string
+	IsDate bool
+}
+
 func (self *RDBManager) FindList(cnd *sqlc.Cnd, data interface{}) error {
 	start := util.Time()
 	if cnd == nil {

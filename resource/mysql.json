@@ -1,5 +1,5 @@
 {
-  "DsName": "TEST",
+  "DsName": "",
   "Host": "192.168.27.160",
   "Port": 3306,
   "Database": "openwallet",

@@ -236,7 +236,7 @@ func TestMQPull(t *testing.T) {
 			},
 		},
 	)
-	time.Sleep(10*time.Second)
+	time.Sleep(10 * time.Second)
 	//mq.AddPullReceiver(&rabbitmq.PullReceiver{
 	//	Exchange: "my.test.exchange1010",
 	//	Queue:    "my.test.queue1010",
@@ -260,7 +260,36 @@ func TestMQPublish(t *testing.T) {
 	})
 }
 
-func TestTimeStr(t *testing.T) {
-	fmt.Println(util.Time2Str(util.Time()))
-	fmt.Println(util.Time2Str(0))
+func TestMapperOne(t *testing.T) {
+	mysql, err := new(sqld.MysqlManager).Get(sqld.Option{AutoTx: true, CacheSync: true})
+	if err != nil {
+		panic(err)
+	}
+	defer mysql.Close()
+	rs, err := mysql.Tx.Query("select * from ow_wallet limit 0, 2")
+	if err != nil {
+		panic(err)
+	}
+	model := OwWallet{}
+	if err := mysql.MapperOne(rs, &model); err != nil {
+		panic(err)
+	}
+	fmt.Println(util.ObjectToJson(model))
+}
+
+func TestMapperList(t *testing.T) {
+	mysql, err := new(sqld.MysqlManager).Get(sqld.Option{AutoTx: true, CacheSync: true})
+	if err != nil {
+		panic(err)
+	}
+	defer mysql.Close()
+	rs, err := mysql.Tx.Query("select * from ow_wallet limit 0, 2")
+	if err != nil {
+		panic(err)
+	}
+	result := []*OwWallet{}
+	if err := mysql.MapperList(rs, &OwWallet{}, &result); err != nil {
+		panic(err)
+	}
+	fmt.Println(util.ObjectToJson(result))
 }
