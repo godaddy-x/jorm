@@ -77,10 +77,10 @@ func (self *ConsulManager) InitConfig(input ...ConsulConfig) (*ConsulManager, er
 		}
 		result.Node = conf.Node
 		manager.Config = result
-		if len(result.DsName) == 0 {
+		if len(conf.DsName) == 0 {
 			consul_sessions[conf.Host] = manager
 		} else {
-			consul_sessions[result.DsName] = manager
+			consul_sessions[conf.DsName] = manager
 		}
 	}
 	if len(consul_sessions) == 0 {
