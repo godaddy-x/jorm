@@ -175,13 +175,11 @@ func (self *MGOManager) Save(datas ...interface{}) error {
 			if err != nil {
 				return self.Error(util.AddStr("mongo更新数据失败: ", err.Error()))
 			}
-			return nil
 		} else { // 新增数据
 			err = db.Insert(data)
 			if err != nil {
 				return self.Error(util.AddStr("mongo保存数据失败: ", err.Error()))
 			}
-			return nil
 		}
 	}
 	return nil
