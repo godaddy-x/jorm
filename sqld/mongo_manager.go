@@ -5,6 +5,7 @@ import (
 	"github.com/godaddy-x/jorm/sqlc"
 	"github.com/godaddy-x/jorm/util"
 	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
 	"log"
 	"reflect"
 	"time"
@@ -147,39 +148,54 @@ func (self *MGOManager) Save(datas ...interface{}) error {
 	if datas == nil || len(datas) == 0 {
 		return self.Error("参数列表不能为空")
 	}
-	for e := range datas {
-		start := util.Time()
-		data := datas[e]
+	start := util.Time()
+	defer self.debug("Save/Update", &datas, start)
+	copySession := self.Session.Copy()
+	defer copySession.Close()
+	var db *mgo.Collection
+	var err error
+	saveObjs := make([]interface{}, 0, len(datas))
+	for _, data := range datas {
 		if data == nil {
 			return self.Error("参数元素不能为空")
 		}
 		if reflect.ValueOf(data).Kind() != reflect.Ptr {
 			return self.Error("参数值必须为指针类型")
 		}
+		if db == nil {
+			db, err = self.GetDatabase(copySession, data)
+			if err != nil {
+				return self.Error(err)
+			}
+		}
 		objectId := util.GetDataID(data)
 		if objectId == 0 {
+			objectId = util.GetUUIDInt64()
 			v := reflect.ValueOf(data).Elem()
-			v.FieldByName("Id").Set(reflect.ValueOf(util.GetUUIDInt64()))
+			v.FieldByName("Id").Set(reflect.ValueOf(objectId))
 		}
-		copySession := self.Session.Copy()
-		defer copySession.Close()
-		db, err := self.GetDatabase(copySession, data)
+		pipe, err := self.buildPipeCondition(sqlc.M(nil).Eq("_id", objectId), true)
 		if err != nil {
-			return self.Error(err)
+			return self.Error(util.AddStr("mongo构建查询命令失败: ", err.Error()))
 		}
-		defer self.debug("Save/Update", data, start)
-		newObject := util.NewInstance(data)
-		err = db.FindId(objectId).One(newObject)
-		if err == nil { // 更新数据
-			err = db.UpdateId(objectId, data)
-			if err != nil {
-				return self.Error(util.AddStr("mongo更新数据失败: ", err.Error()))
+		result := make(map[string]int64)
+		if err := db.Pipe(pipe).One(&result); err != nil {
+			if err != mgo.ErrNotFound {
+				return self.Error(util.Error("[Mongo.Count]查询数据失败: ", err))
 			}
-		} else { // 新增数据
-			err = db.Insert(data)
-			if err != nil {
-				return self.Error(util.AddStr("mongo保存数据失败: ", err.Error()))
-			}
+		}
+		total, _ := result[COUNT_BY]
+		if total == 0 {
+			saveObjs = append(saveObjs, data)
+			continue
+		}
+		if err := db.UpdateId(objectId, data); err != nil {
+			return self.Error(util.AddStr("mongo更新数据失败: ", err))
+		}
+	}
+	if len(saveObjs) > 0 {
+		if err := db.Insert(saveObjs ...); err != nil {
+			return self.Error(util.AddStr("mongo保存数据失败: ", err))
 		}
 	}
 	return nil
@@ -194,24 +210,35 @@ func (self *MGOManager) Delete(datas ...interface{}) error {
 	if datas == nil || len(datas) == 0 {
 		return self.Error("参数列表不能为空")
 	}
-	for e := range datas {
-		data := datas[e]
-		start := util.Time()
+	start := util.Time()
+	defer self.debug("Delete", &datas, start)
+	copySession := self.Session.Copy()
+	defer copySession.Close()
+	var db *mgo.Collection
+	var err error
+	delIds := make([]interface{}, 0, len(datas))
+	for _, data := range datas {
 		if data == nil {
 			return self.Error("参数元素不能为空")
 		}
 		if reflect.ValueOf(data).Kind() != reflect.Ptr {
 			return self.Error("参数值必须为指针类型")
 		}
-		copySession := self.Session.Copy()
-		defer copySession.Close()
-		db, err := self.GetDatabase(copySession, data)
-		if err != nil {
-			return self.Error(err)
+		if db == nil {
+			db, err = self.GetDatabase(copySession, data)
+			if err != nil {
+				return self.Error(err)
+			}
 		}
-		defer self.debug("Delete", data, start)
-		if err := db.RemoveId(util.GetDataID(data)); err != nil {
-			return self.Error("删除数据ID失败")
+		objectId := util.GetDataID(data)
+		if objectId == 0 {
+			continue
+		}
+		delIds = append(delIds, objectId)
+	}
+	if len(delIds) > 0 {
+		if _, err := db.RemoveAll(bson.M{"_id": bson.M{"$in": delIds}}); err != nil {
+			return self.Error(util.AddStr("删除数据ID失败", err))
 		}
 	}
 	return nil
@@ -248,7 +275,7 @@ func (self *MGOManager) Count(cnd *sqlc.Cnd) (int64, error) {
 		result := make(map[string]int64)
 		err = db.Pipe(pipe).One(&result)
 		if err != nil {
-			if err.Error() == "not found" {
+			if err == mgo.ErrNotFound {
 				return 0, nil
 			}
 			return 0, self.Error(util.AddStr("mongo查询数据失败: ", err.Error()))
@@ -314,7 +341,7 @@ func (self *MGOManager) FindOne(cnd *sqlc.Cnd, data interface{}) error {
 	defer self.debug("FindOne", pipe, start)
 	err = db.Pipe(pipe).One(data)
 	if err != nil {
-		if err.Error() != "not found" {
+		if err != mgo.ErrNotFound {
 			return self.Error(util.AddStr("mongo查询数据失败: ", err.Error()))
 		}
 	}
@@ -362,7 +389,7 @@ func (self *MGOManager) FindList(cnd *sqlc.Cnd, data interface{}) error {
 	defer self.debug("FindList", pipe, start)
 	err = db.Pipe(pipe).All(data)
 	if err != nil {
-		if err.Error() != "not found" {
+		if err != mgo.ErrNotFound {
 			return self.Error(util.AddStr("mongo查询数据失败: ", err.Error()))
 		}
 	}
