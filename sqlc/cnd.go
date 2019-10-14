@@ -32,6 +32,10 @@ const (
 	LEFT_
 	RIGHT_
 	INNER_
+	SUM_
+	AVG_
+	MIN_
+	MAX_
 )
 
 var (
@@ -74,6 +78,7 @@ type Cnd struct {
 	Distincts   []string
 	Groupbys    []string
 	Orderbys    []Condition
+	Aggregates  []Condition
 	UpdateKV    map[string]interface{}
 	Model       interface{}
 	Pagination  dialect.Dialect
@@ -179,6 +184,13 @@ func (self *Cnd) In(key string, values ...interface{}) *Cnd {
 func (self *Cnd) NotIn(key string, values ...interface{}) *Cnd {
 	condit := Condition{NOT_IN_, key, nil, values}
 	return addDefaultCondit(self, condit)
+}
+
+// aggregate
+func (self *Cnd) Aggregate(agg int, key string) *Cnd {
+	condit := Condition{agg, key, nil, nil}
+	self.Aggregates = append(self.Aggregates, condit)
+	return self
 }
 
 // like

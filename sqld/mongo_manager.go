@@ -339,6 +339,25 @@ func (self *MGOManager) FindOne(cnd *sqlc.Cnd, data interface{}) error {
 		return self.Error(util.AddStr("mongo构建查询命令失败: ", err.Error()))
 	}
 	defer self.debug("FindOne", pipe, start)
+	if len(cnd.Aggregates) > 0 {
+		for _, v := range cnd.Aggregates {
+			if v.Key == "_id" {
+				result := map[string]interface{}{}
+				err = db.Pipe(pipe).One(&result)
+				if err != nil {
+					if err != mgo.ErrNotFound {
+						return self.Error(util.AddStr("mongo查询数据失败: ", err.Error()))
+					}
+				}
+				idv, _ := result["id"]
+				result["_id"] = idv
+				if err := util.JsonToAny(&result, data); err != nil {
+					return self.Error(util.AddStr("mongo查询数据转换失败: ", err.Error()))
+				}
+				return nil
+			}
+		}
+	}
 	err = db.Pipe(pipe).One(data)
 	if err != nil {
 		if err != mgo.ErrNotFound {
@@ -430,6 +449,7 @@ func (self *MGOManager) buildPipeCondition(cnd *sqlc.Cnd, iscount bool) ([]inter
 	match := buildMongoMatch(cnd)
 	project := buildMongoProject(cnd)
 	sortby := buildMongoSortBy(cnd)
+	aggregate := buildAggregate(cnd)
 	pageinfo := buildMongoLimit(cnd)
 	pipe := make([]interface{}, 0)
 	if len(match) > 0 {
@@ -446,6 +466,9 @@ func (self *MGOManager) buildPipeCondition(cnd *sqlc.Cnd, iscount bool) ([]inter
 		tmp := make(map[string]interface{})
 		tmp["$sort"] = sortby
 		pipe = append(pipe, tmp)
+	}
+	if len(aggregate) > 0 {
+		pipe = append(pipe, aggregate)
 	}
 	if !iscount && pageinfo != nil {
 		tmp := make(map[string]interface{})
@@ -576,6 +599,32 @@ func buildMongoSortBy(cnd *sqlc.Cnd) map[string]int {
 		}
 	}
 	return sortby
+}
+
+// 构建mongo聚合命令
+func buildAggregate(cnd *sqlc.Cnd) map[string]interface{} {
+	var query = make(map[string]interface{})
+	for _, v := range cnd.Aggregates {
+		tmp := make(map[string]interface{})
+		key := v.Key
+		if v.Key == "_id" {
+			key = "id"
+		}
+		tmp["_id"] = 0
+		if v.Logic == sqlc.SUM_ {
+			tmp[key] = map[string]interface{}{"$sum": util.AddStr("$", v.Key)}
+		} else if v.Logic == sqlc.MAX_ {
+			tmp[key] = map[string]interface{}{"$max": util.AddStr("$", v.Key)}
+		} else if v.Logic == sqlc.MIN_ {
+			tmp[key] = map[string]interface{}{"$min": util.AddStr("$", v.Key)}
+		} else if v.Logic == sqlc.AVG_ {
+			tmp[key] = map[string]interface{}{"$avg": util.AddStr("$", v.Key)}
+		} else {
+			return query
+		}
+		query["$group"] = tmp
+	}
+	return query
 }
 
 // 构建mongo分页命令
