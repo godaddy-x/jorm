@@ -339,23 +339,28 @@ func (self *MGOManager) FindOne(cnd *sqlc.Cnd, data interface{}) error {
 		return self.Error(util.AddStr("mongo构建查询命令失败: ", err.Error()))
 	}
 	defer self.debug("FindOne", pipe, start)
-	if len(cnd.Aggregates) > 0 {
-		for _, v := range cnd.Aggregates {
-			if v.Key == "_id" {
-				result := map[string]interface{}{}
-				err = db.Pipe(pipe).One(&result)
-				if err != nil {
-					if err != mgo.ErrNotFound {
-						return self.Error(util.AddStr("mongo查询数据失败: ", err.Error()))
-					}
-				}
-				idv, _ := result["id"]
-				result["_id"] = idv
-				if err := util.JsonToAny(&result, data); err != nil {
-					return self.Error(util.AddStr("mongo查询数据转换失败: ", err.Error()))
-				}
-				return nil
+	if len(cnd.Summaries) > 0 {
+		hasId := false
+		for k, _ := range cnd.Summaries {
+			if k == "_id" {
+				hasId = true
+				break
 			}
+		}
+		if hasId {
+			result := map[string]interface{}{}
+			err = db.Pipe(pipe).One(&result)
+			if err != nil {
+				if err != mgo.ErrNotFound {
+					return self.Error(util.AddStr("mongo查询数据失败: ", err.Error()))
+				}
+			}
+			idv, _ := result["id"]
+			result["_id"] = idv
+			if err := util.JsonToAny(&result, data); err != nil {
+				return self.Error(util.AddStr("mongo查询数据转换失败: ", err.Error()))
+			}
+			return nil
 		}
 	}
 	err = db.Pipe(pipe).One(data)
@@ -449,7 +454,7 @@ func (self *MGOManager) buildPipeCondition(cnd *sqlc.Cnd, iscount bool) ([]inter
 	match := buildMongoMatch(cnd)
 	project := buildMongoProject(cnd)
 	sortby := buildMongoSortBy(cnd)
-	aggregate := buildAggregate(cnd)
+	aggregate := buildSummary(cnd)
 	pageinfo := buildMongoLimit(cnd)
 	pipe := make([]interface{}, 0)
 	if len(match) > 0 {
@@ -602,28 +607,28 @@ func buildMongoSortBy(cnd *sqlc.Cnd) map[string]int {
 }
 
 // 构建mongo聚合命令
-func buildAggregate(cnd *sqlc.Cnd) map[string]interface{} {
+func buildSummary(cnd *sqlc.Cnd) map[string]interface{} {
 	var query = make(map[string]interface{})
-	for _, v := range cnd.Aggregates {
-		tmp := make(map[string]interface{})
-		key := v.Key
-		if v.Key == "_id" {
+	tmp := make(map[string]interface{})
+	tmp["_id"] = 0
+	for k, v := range cnd.Summaries {
+		key := k
+		if key == "_id" {
 			key = "id"
 		}
-		tmp["_id"] = 0
-		if v.Logic == sqlc.SUM_ {
-			tmp[key] = map[string]interface{}{"$sum": util.AddStr("$", v.Key)}
-		} else if v.Logic == sqlc.MAX_ {
-			tmp[key] = map[string]interface{}{"$max": util.AddStr("$", v.Key)}
-		} else if v.Logic == sqlc.MIN_ {
-			tmp[key] = map[string]interface{}{"$min": util.AddStr("$", v.Key)}
-		} else if v.Logic == sqlc.AVG_ {
-			tmp[key] = map[string]interface{}{"$avg": util.AddStr("$", v.Key)}
+		if v == sqlc.SUM_ {
+			tmp[key] = map[string]interface{}{"$sum": util.AddStr("$", k)}
+		} else if v == sqlc.MAX_ {
+			tmp[key] = map[string]interface{}{"$max": util.AddStr("$", k)}
+		} else if v == sqlc.MIN_ {
+			tmp[key] = map[string]interface{}{"$min": util.AddStr("$", k)}
+		} else if v == sqlc.AVG_ {
+			tmp[key] = map[string]interface{}{"$avg": util.AddStr("$", k)}
 		} else {
 			return query
 		}
-		query["$group"] = tmp
 	}
+	query["$group"] = tmp
 	return query
 }
 

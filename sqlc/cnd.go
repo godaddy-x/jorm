@@ -78,7 +78,7 @@ type Cnd struct {
 	Distincts   []string
 	Groupbys    []string
 	Orderbys    []Condition
-	Aggregates  []Condition
+	Summaries   map[string]int
 	UpdateKV    map[string]interface{}
 	Model       interface{}
 	Pagination  dialect.Dialect
@@ -103,6 +103,7 @@ func M(model interface{}) *Cnd {
 		Distincts:  make([]string, 0),
 		Groupbys:   make([]string, 0),
 		Orderbys:   make([]Condition, 0),
+		Summaries:  make(map[string]int),
 		UpdateKV:   make(map[string]interface{}),
 		Model:      model,
 	}
@@ -186,10 +187,9 @@ func (self *Cnd) NotIn(key string, values ...interface{}) *Cnd {
 	return addDefaultCondit(self, condit)
 }
 
-// aggregate
-func (self *Cnd) Aggregate(agg int, key string) *Cnd {
-	condit := Condition{agg, key, nil, nil}
-	self.Aggregates = append(self.Aggregates, condit)
+// summary
+func (self *Cnd) Summary(logic int, key string) *Cnd {
+	self.Summaries[key] = logic
 	return self
 }
 
