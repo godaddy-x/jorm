@@ -15,6 +15,10 @@ var (
 	mgo_sessions = make(map[string]*MGOManager)
 )
 
+type CountResult struct {
+	Total int64 `bson:"COUNT_BY"`
+}
+
 const (
 	COUNT_BY = "COUNT_BY"
 	MASTER   = "MASTER"
@@ -178,14 +182,13 @@ func (self *MGOManager) Save(datas ...interface{}) error {
 		if err != nil {
 			return self.Error(util.AddStr("mongo构建查询命令失败: ", err.Error()))
 		}
-		result := make(map[string]int64)
+		result := CountResult{}
 		if err := db.Pipe(pipe).One(&result); err != nil {
 			if err != mgo.ErrNotFound {
 				return self.Error(util.Error("[Mongo.Count]查询数据失败: ", err))
 			}
 		}
-		total, _ := result[COUNT_BY]
-		if total == 0 {
+		if result.Total == 0 {
 			saveObjs = append(saveObjs, data)
 			continue
 		}
@@ -272,7 +275,7 @@ func (self *MGOManager) Count(cnd *sqlc.Cnd) (int64, error) {
 			return 0, self.Error(util.AddStr("mongo构建查询命令失败: ", err.Error()))
 		}
 		defer self.debug("Count", pipe, start)
-		result := make(map[string]int64)
+		result := CountResult{}
 		err = db.Pipe(pipe).One(&result)
 		if err != nil {
 			if err == mgo.ErrNotFound {
@@ -280,10 +283,7 @@ func (self *MGOManager) Count(cnd *sqlc.Cnd) (int64, error) {
 			}
 			return 0, self.Error(util.AddStr("mongo查询数据失败: ", err.Error()))
 		}
-		pageTotal, ok = result[COUNT_BY]
-		if !ok {
-			return 0, self.Error("获取记录数失败")
-		}
+		pageTotal = result.Total
 	}
 	if pageTotal > 0 && cnd.Pagination.PageSize > 0 {
 		var pageCount int64
@@ -609,6 +609,9 @@ func buildMongoSortBy(cnd *sqlc.Cnd) map[string]int {
 // 构建mongo聚合命令
 func buildSummary(cnd *sqlc.Cnd) map[string]interface{} {
 	var query = make(map[string]interface{})
+	if len(cnd.Summaries) == 0 {
+		return nil
+	}
 	tmp := make(map[string]interface{})
 	tmp["_id"] = 0
 	for k, v := range cnd.Summaries {

@@ -113,19 +113,12 @@ func TestMongo(t *testing.T) {
 		fmt.Println(err.Error())
 		return
 	}
-	wallet1 := OwWallet{
-		Id:       1182662453184430080,
-		AppID:    util.GetUUID(),
-		WalletID: util.GetUUID(),
-	}
-	wallet2 := OwWallet{
-		Id:       1182662491000274944,
-		AppID:    util.GetUUID(),
-		WalletID: util.GetUUID(),
-	}
-	if err := db.Update(&wallet1, &wallet2); err != nil {
+	wallet1 := User{Id: 1184287781917032448}
+	wallet2 := User{}
+	if err := db.Save(&wallet1, &wallet2); err != nil {
 		fmt.Println(err.Error())
 	}
+	fmt.Println(wallet1)
 	// db.Delete(&wallet2, &wallet1)
 }
 
