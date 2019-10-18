@@ -20,16 +20,18 @@ var (
 
 // 数据库配置
 type DBConfig struct {
-	Host      string // 地址IP
-	Port      int    // 数据库端口
-	Database  string // 数据库名称
-	Username  string // 账号
-	Password  string // 密码
-	Debug     bool   // debug模式
-	CacheSync bool   // 是否缓存数据
-	DsName    string // 数据源名称
-	Node      int    // 节点
-	AutoID    bool   // 自主ID模式
+	Host        string // 地址IP
+	Port        int    // 数据库端口
+	Database    string // 数据库名称
+	Username    string // 账号
+	Password    string // 密码
+	Debug       bool   // debug模式
+	CacheSync   bool   // 是否缓存数据
+	DsName      string // 数据源名称
+	Node        int    // 节点
+	AutoID      bool   // 自主ID模式
+	SlowQuery   int64  // 0.不开启筛选 >0开启筛选查询 毫秒
+	SlowLogPath string // 慢查询写入地址
 }
 
 // 数据选项
@@ -40,6 +42,8 @@ type Option struct {
 	DsName       string       // 数据源,分库时使用
 	CacheSync    bool         // 是否数据缓存,比如redis,mongo等
 	CacheManager cache.ICache // 缓存管理器
+	SlowQuery    int64        // 0.不开启筛选 >0开启筛选查询 毫秒
+	SlowLogPath  string       // 慢查询写入地址
 }
 
 // 数据库管理器

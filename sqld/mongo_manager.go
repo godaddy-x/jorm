@@ -1,18 +1,21 @@
 package sqld
 
 import (
+	"fmt"
 	"github.com/godaddy-x/jorm/cache"
+	"github.com/godaddy-x/jorm/log"
 	"github.com/godaddy-x/jorm/sqlc"
 	"github.com/godaddy-x/jorm/util"
+	"go.uber.org/zap"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-	"log"
 	"reflect"
 	"time"
 )
 
 var (
 	mgo_sessions = make(map[string]*MGOManager)
+	mgo_slowlog  *zap.Logger
 )
 
 type CountResult struct {
@@ -91,6 +94,8 @@ func (self *MGOManager) GetDB(option ...Option) error {
 			return self.Error(util.AddStr("mongo数据源[", ds, "]未找到,请检查..."))
 		}
 		self.Debug = manager.Debug
+		self.SlowQuery = manager.SlowQuery
+		self.SlowLogPath = manager.SlowLogPath
 		self.Session = manager.Session
 		self.CacheManager = manager.CacheManager
 	} else {
@@ -109,8 +114,7 @@ func (self *MGOManager) InitConfigAndCache(manager cache.ICache, input ...MGOCon
 }
 
 func (self *MGOManager) buildByConfig(manager cache.ICache, input ...MGOConfig) error {
-	for e := range input {
-		conf := input[e]
+	for _, conf := range input {
 		dialInfo := mgo.DialInfo{
 			Addrs:     conf.Addrs,
 			Direct:    conf.Direct,
@@ -139,12 +143,42 @@ func (self *MGOManager) buildByConfig(manager cache.ICache, input ...MGOConfig) 
 		if err != nil {
 			panic("redis数据源[" + self.DsName + "]类型异常失败")
 		}
-		mgo_sessions[self.DsName] = &MGOManager{DBManager: DBManager{Debug: conf.Debug, CacheManager: manager}, Session: session}
+		dbmgr := DBManager{}
+		dbmgr.CacheManager = manager
+		dbmgr.Debug = conf.Debug
+		dbmgr.SlowQuery = conf.SlowQuery
+		dbmgr.SlowLogPath = conf.SlowLogPath
+		mgomgr := &MGOManager{DBManager: dbmgr, Session: session}
+		mgomgr.initSlowLog()
+		mgo_sessions[self.DsName] = mgomgr
 	}
 	if len(mgo_sessions) == 0 {
 		panic("mongo连接初始化失败: 数据源为0")
 	}
 	return nil
+}
+
+func (self *MGOManager) initSlowLog() {
+	if self.SlowQuery == 0 || len(self.SlowLogPath) == 0 {
+		return
+	}
+	if mgo_slowlog == nil {
+		mgo_slowlog = log.InitNewLog(&log.ZapConfig{
+			Level:   "warn",
+			Console: false,
+			FileConfig: &log.FileConfig{
+				Compress:   true,
+				Filename:   self.SlowLogPath,
+				MaxAge:     7,
+				MaxBackups: 7,
+				MaxSize:    512,
+			}})
+		fmt.Println("MGO查询监控日志服务启动成功...")
+	}
+}
+
+func (self *MGOManager) getSlowLog() *zap.Logger {
+	return mgo_slowlog
 }
 
 // 保存或更新数据到mongo集合
@@ -655,6 +689,15 @@ func buildMongoLimit(cnd *sqlc.Cnd) []int64 {
 }
 
 func (self *MGOManager) debug(title string, pipe interface{}, start int64) {
+	cost := util.Time() - start
+	if self.SlowQuery > 0 && cost > self.SlowQuery {
+		if title == "Count" || title == "FindOne" || title == "FindList" {
+			l := self.getSlowLog()
+			if l != nil {
+				l.Warn(title, log.Int64("cost", cost), log.Any("pipe", pipe))
+			}
+		}
+	}
 	if self.Debug {
 		str, _ := util.ObjectToJson(pipe)
 		log.Println(util.AddStr("mongo debug -> ", title, ": ", str, " --- cost: ", util.AnyToStr(util.Time()-start)))
