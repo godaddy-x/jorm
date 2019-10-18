@@ -1,13 +1,26 @@
 package concurrent
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
 
-type ConcurrentMap struct {
+type Map struct {
 	lock sync.RWMutex
 	data map[string]interface{}
 }
 
-func (self *ConcurrentMap) Get(key string, callfun func(key string) (interface{}, error)) (interface{}, error) {
+func NewMap() *Map {
+	return &Map{data: map[string]interface{}{}}
+}
+
+func (self *Map) Get(key string, callfun func(key string) (interface{}, error)) (interface{}, error) {
+	if len(key) == 0 {
+		return nil, errors.New("get key is nil")
+	}
+	if callfun == nil {
+		return nil, errors.New("get callfun is nil")
+	}
 	var b bool
 	var v interface{}
 	var err error
@@ -28,7 +41,7 @@ func (self *ConcurrentMap) Get(key string, callfun func(key string) (interface{}
 	return v, err
 }
 
-func (self *ConcurrentMap) Del(key string, callfun func(key string) (interface{}, error)) error {
+func (self *Map) Del(key string, callfun func(key string) (interface{}, error)) error {
 	var b bool
 	var err error
 	self.lock.RLock()
@@ -36,7 +49,9 @@ func (self *ConcurrentMap) Del(key string, callfun func(key string) (interface{}
 		self.lock.RUnlock()
 		self.lock.Lock()
 		if _, b = self.data[key]; b {
-			_, err = callfun(key)
+			if callfun != nil {
+				_, err = callfun(key)
+			}
 			if err == nil {
 				delete(self.data, key)
 			}
@@ -48,7 +63,13 @@ func (self *ConcurrentMap) Del(key string, callfun func(key string) (interface{}
 	return err
 }
 
-func (self *ConcurrentMap) Set(key string, callfun func(key string) (interface{}, error)) (interface{}, error) {
+func (self *Map) Set(key string, callfun func(key string) (interface{}, error)) (interface{}, error) {
+	if len(key) == 0 {
+		return nil, errors.New("set key is nil")
+	}
+	if callfun == nil {
+		return nil, errors.New("set callfun is nil")
+	}
 	self.lock.Lock()
 	v, err := callfun(key)
 	if v != nil && err == nil {

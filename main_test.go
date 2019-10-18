@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/godaddy-x/jorm/amqp"
 	c2 "github.com/godaddy-x/jorm/cache/mc"
+	"github.com/godaddy-x/jorm/concurrent"
 	"github.com/godaddy-x/jorm/exception"
 	"github.com/godaddy-x/jorm/gauth"
 	"github.com/godaddy-x/jorm/jwt"
@@ -123,6 +124,19 @@ func TestMongo(t *testing.T) {
 }
 
 func TestRedis(t *testing.T) {
+	node := concurrent.NewMap()
+	v, err := node.Get("test", func(key string) (i interface{}, e error) {
+		return "123", nil
+	})
+	fmt.Println(v, err)
+	fmt.Println(node)
+	node.Del("test", nil)
+	fmt.Println(node)
+	v, err = node.Set("test", func(key string) (i interface{}, e error) {
+		return "123456", nil
+	})
+	fmt.Println(v, err)
+	fmt.Println(node)
 	//client, err := new(cache.RedisManager).Client()
 	//if err != nil {
 	//	fmt.Println(err.Error())
