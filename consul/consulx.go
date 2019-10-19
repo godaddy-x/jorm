@@ -80,6 +80,7 @@ func (self *ConsulManager) InitConfig(input ...ConsulConfig) (*ConsulManager, er
 		}
 		result.Node = conf.Node
 		manager.Config = result
+		manager.initSlowLog()
 		if len(result.DsName) == 0 {
 			consul_sessions[conf.Host] = manager
 		} else {
