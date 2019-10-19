@@ -5,10 +5,10 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"github.com/godaddy-x/jorm/amqp"
+	"github.com/godaddy-x/jorm/log"
 	"github.com/godaddy-x/jorm/util"
 	consulapi "github.com/hashicorp/consul/api"
-	"log"
+	"go.uber.org/zap"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -20,6 +20,7 @@ import (
 var (
 	DefaultHost     = "consulx.com:8500"
 	consul_sessions = make(map[string]*ConsulManager)
+	consul_slowlog  *zap.Logger
 )
 
 type ConsulManager struct {
@@ -42,6 +43,8 @@ type ConsulConfig struct {
 	Timeout      string
 	Interval     string
 	DestroyAfter string
+	SlowQuery    int64  // 0.不开启筛选 >0开启筛选查询 毫秒
+	SlowLogPath  string // 慢查询写入地址
 }
 
 // RPC日志
@@ -50,16 +53,16 @@ type MonitorLog struct {
 	RpcHost     string
 	RpcPort     int
 	Protocol    string
+	AgentID     string
 	ServiceName string
 	MethodName  string
 	BeginTime   int64
 	CostTime    int64
-	Errors      []string
+	Error       error
 }
 
 func (self *ConsulManager) InitConfig(input ...ConsulConfig) (*ConsulManager, error) {
-	for e := range input {
-		conf := input[e]
+	for _, conf := range input {
 		config := consulapi.DefaultConfig()
 		config.Address = conf.Host
 		client, err := consulapi.NewClient(config)
@@ -87,6 +90,29 @@ func (self *ConsulManager) InitConfig(input ...ConsulConfig) (*ConsulManager, er
 		log.Println("consul连接初始化失败: 数据源为0")
 	}
 	return self, nil
+}
+
+func (self *ConsulManager) initSlowLog() {
+	if self.Config.SlowQuery == 0 || len(self.Config.SlowLogPath) == 0 {
+		return
+	}
+	if consul_slowlog == nil {
+		consul_slowlog = log.InitNewLog(&log.ZapConfig{
+			Level:   "warn",
+			Console: false,
+			FileConfig: &log.FileConfig{
+				Compress:   true,
+				Filename:   self.Config.SlowLogPath,
+				MaxAge:     7,
+				MaxBackups: 7,
+				MaxSize:    512,
+			}})
+		fmt.Println("Consul监控日志服务启动成功...")
+	}
+}
+
+func (self *ConsulManager) getSlowLog() *zap.Logger {
+	return consul_slowlog
 }
 
 func (self *ConsulManager) Client(dsname ...string) (*ConsulManager, error) {
@@ -242,70 +268,76 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	if len(srvs) == 0 {
 		return errors.New(util.AddStr("[", srvName, "]无可用服务"))
 	}
-	agent := srvs[0]
-	meta := agent.Meta
-	if len(meta) < 4 {
-		return errors.New(util.AddStr("[[", agent.ID, "]服务参数异常,请检查..."))
+
+	var agentID, host, protocol string
+	for _, agent := range srvs {
+		meta := agent.Meta
+		if len(meta) < 4 {
+			log.Warn("服务参数异常", 0, log.String("ID", agent.ID))
+			continue
+		}
+		methods := meta["methods"]
+		s := "," + methodName + ","
+		if !util.HasStr(methods, s) {
+			log.Warn("服务方法无效", 0, log.String("ID", agent.ID), log.String("method", methodName))
+			continue
+		}
+		agentID = agent.ID
+		host = meta["host"]
+		protocol = meta["protocol"]
+		if len(host) == 0 || len(protocol) == 0 {
+			log.Warn("服务meta参数异常", 0, log.String("ID", agent.ID), log.String("method", methodName))
+			continue
+		} else {
+			s := strings.Split(host, ":")
+			port, _ := util.StrToInt(s[1])
+			monitor.RpcHost = s[0]
+			monitor.RpcPort = port
+			monitor.Protocol = protocol
+			monitor.AgentID = agentID
+			break
+		}
 	}
-	methods := meta["methods"]
-	s := "," + methodName + ","
-	if !util.HasStr(methods, s) {
-		return errors.New(util.AddStr("[", agent.ID, "][", methodName, "]无效,请检查..."))
-	}
-	host := meta["host"]
-	protocol := meta["protocol"]
 	if len(host) == 0 || len(protocol) == 0 {
-		return errors.New("meta参数异常")
-	} else {
-		s := strings.Split(host, ":")
-		port, _ := util.StrToInt(s[1])
-		monitor.RpcHost = s[0]
-		monitor.RpcPort = port
-		monitor.Protocol = protocol
+		return util.Error("没有找到任何RPC服务代理参数")
 	}
-	conn, err := net.DialTimeout(protocol, host, time.Second*10)
+	defer self.rpcMonitor(monitor, err, args, reply)
+	var conn net.Conn
+	var err1, err2 error
+	conn, err = net.DialTimeout(protocol, host, time.Second*10)
 	if err != nil {
-		log.Println(util.AddStr("[", agent.ID, "][", host, "]", "[", srv, "]连接失败: ", err.Error()))
-		err := errors.New(util.AddStr("[", agent.ID, "][", host, "]", "[", srv, "]连接失败: ", err.Error()))
-		self.rpcMonitor(monitor, err)
-		return err
+		log.Error("consul服务连接失败", 0, log.String("ID", agentID), log.String("host", host), log.String("srv", srv), log.AddError(err))
+		return util.Error("[", agentID, "][", host, "]", "[", srv, "]连接失败: ", err)
 	}
 	encBuf := bufio.NewWriter(conn)
 	codec := &gobClientCodec{conn, gob.NewDecoder(conn), gob.NewEncoder(encBuf), encBuf}
 	cli := rpc.NewClientWithCodec(codec)
-	err1 := cli.Call(srv, args, reply)
-	err2 := cli.Close()
-	if err1 != nil && err2 != nil {
-		msg := util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err1.Error(), ";", err2.Error())
-		log.Println(msg)
-		return self.rpcMonitor(monitor, errors.New(util.AddStr(err1.Error(), " -------- ", err2.Error())))
-	}
+	err1 = cli.Call(srv, args, reply)
+	err2 = cli.Close()
 	if err1 != nil {
-		msg := util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err1.Error())
-		log.Println(msg)
-		return self.rpcMonitor(monitor, err1)
+		err = util.Error("[", agentID, "][", host, "]", "[", srv, "]访问失败: ", err1)
+		log.Error("consul服务访问失败", 0, log.String("ID", agentID), log.String("host", host), log.String("srv", srv), log.AddError(err1))
+		return err
 	} else if err2 != nil {
-		msg := util.AddStr("[", host, "]", "[", srv, "]访问失败: ", err2.Error())
-		log.Println(msg)
-		return self.rpcMonitor(monitor, err2)
+		err = util.Error("[", agentID, "][", host, "]", "[", srv, "]关闭失败: ", err2)
+		log.Error("consul服务关闭失败", 0, log.String("ID", agentID), log.String("host", host), log.String("srv", srv), log.AddError(err2))
+		return err
 	}
-	return self.rpcMonitor(monitor, nil)
+	return nil
 }
 
 // 输出RPC监控日志
-func (self *ConsulManager) rpcMonitor(monitor MonitorLog, err error) error {
+func (self *ConsulManager) rpcMonitor(monitor MonitorLog, err error, args interface{}, reply interface{}) error {
 	monitor.CostTime = util.Time() - monitor.BeginTime
 	if err != nil {
-		monitor.Errors = []string{err.Error()}
+		monitor.Error = err
 		log.Println(util.ObjectToJson(monitor))
+		return nil
 	}
-	if self.Config.Logger == "local" {
-		log.Println(util.ObjectToJson(monitor))
-	} else if self.Config.Logger == "amqp" {
-		if client, err := new(rabbitmq.PublishManager).Client(); err != nil {
-			return err
-		} else if err := client.Publish(rabbitmq.MsgData{Exchange: "stdrpc.exchange", Queue: "stdrpc.monitor", Content: monitor}); err != nil {
-			return err
+	if self.Config.SlowQuery > 0 && monitor.CostTime > self.Config.SlowQuery {
+		l := self.getSlowLog()
+		if l != nil {
+			l.Warn("consul monitor", log.Int64("cost", monitor.CostTime), log.Any("service", monitor), log.Any("request", args), log.Any("response", reply))
 		}
 	}
 	return err
