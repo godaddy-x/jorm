@@ -54,7 +54,9 @@ func ObjectToJson(src interface{}) (string, error) {
 // JSON字符串转对象
 func JsonToObject(src string, target interface{}) error {
 	var json = jsoniter.ConfigCompatibleWithStandardLibrary
-	if err := json.Unmarshal([]byte(src), target); err != nil {
+	d := json.NewDecoder(bytes.NewBuffer([]byte(src)))
+	d.UseNumber()
+	if err := d.Decode(target); err != nil {
 		return errors.New("Json字符串转换对象出现异常: " + err.Error())
 	}
 	return nil
