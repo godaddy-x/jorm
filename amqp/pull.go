@@ -1,6 +1,7 @@
 package rabbitmq
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/godaddy-x/jorm/log"
@@ -180,7 +181,7 @@ func (self *PullReceiver) OnReceive(b []byte) bool {
 		defer log.Debug("MQ消费数据日志", util.Time(), log.String("message", string(b)))
 	}
 	message := MsgData{}
-	if err := json.Unmarshal(b, &message); err != nil {
+	if err := jsonUnmarshal(b, &message); err != nil {
 		defer log.Error("MQ消费数据转换JSON失败", util.Time(), log.String("exchange", self.Exchange), log.String("queue", self.Queue), log.String("message", string(b)))
 	} else if message.Content == nil {
 		defer log.Error("MQ消费数据Content为空", util.Time(), log.String("exchange", self.Exchange), log.String("queue", self.Queue), log.Any("message", message))
@@ -191,4 +192,13 @@ func (self *PullReceiver) OnReceive(b []byte) bool {
 		}
 	}
 	return true
+}
+
+func jsonUnmarshal(data []byte, v interface{}) error {
+	if data == nil || len(data) == 0 {
+		return nil
+	}
+	d := json.NewDecoder(bytes.NewBuffer(data))
+	d.UseNumber()
+	return d.Decode(v)
 }
