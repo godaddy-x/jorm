@@ -75,6 +75,32 @@ func JsonToAny(src interface{}, target interface{}) error {
 	return nil
 }
 
+// JSON字符串转对象
+func JsonToObject2(src string, target interface{}) error {
+	var json = jsoniter.ConfigCompatibleWithStandardLibrary
+	d := json.NewDecoder(bytes.NewBuffer([]byte(src)))
+	d.UseNumber()
+	if err := d.Decode(target); err != nil {
+		return errors.New("Json字符串转换对象出现异常: " + err.Error())
+	}
+	return nil
+}
+
+// 对象转对象
+func JsonToAny2(src interface{}, target interface{}) error {
+	if src == nil || target == nil {
+		return errors.New("参数不能为空")
+	}
+	str, err := ObjectToJson(src)
+	if err != nil {
+		return err
+	}
+	if err := JsonToObject2(str, target); err != nil {
+		return err
+	}
+	return nil
+}
+
 // 通过反射获取对象Id值
 func GetDataID(data interface{}) int64 {
 	valueOf := reflect.ValueOf(data)

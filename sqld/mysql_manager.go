@@ -44,8 +44,7 @@ func (self *MysqlManager) InitConfigAndCache(manager cache.ICache, input ...Mysq
 }
 
 func (self *MysqlManager) buildByConfig(manager cache.ICache, input ...MysqlConfig) error {
-	for e := range input {
-		conf := input[e]
+	for _, conf := range input {
 		link := util.AddStr(conf.Username, ":", conf.Password, "@tcp(", conf.Host, ":", util.AnyToStr(conf.Port), ")/"+conf.Database, "?charset=utf8")
 		db, err := sql.Open("mysql", link)
 		if err != nil {
@@ -56,6 +55,8 @@ func (self *MysqlManager) buildByConfig(manager cache.ICache, input ...MysqlConf
 		db.SetConnMaxLifetime(time.Second * time.Duration(conf.ConnMaxLifetime))
 		rdb := &RDBManager{}
 		rdb.Db = db
+		rdb.SlowQuery = conf.SlowQuery
+		rdb.SlowLogPath = conf.SlowLogPath
 		rdb.Debug = conf.Debug
 		rdb.CacheSync = conf.CacheSync
 		rdb.CacheManager = manager
@@ -64,9 +65,10 @@ func (self *MysqlManager) buildByConfig(manager cache.ICache, input ...MysqlConf
 		} else {
 			rdb.DsName = conf.DsName
 		}
-		RDBs[rdb.DsName] = rdb
+		rdb.initSlowLog()
+		rdbs[rdb.DsName] = rdb
 	}
-	if len(RDBs) == 0 {
+	if len(rdbs) == 0 {
 		panic("mysql连接初始化失败: 数据源为0")
 	}
 	return nil

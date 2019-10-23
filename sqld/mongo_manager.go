@@ -1,7 +1,6 @@
 package sqld
 
 import (
-	"fmt"
 	"github.com/godaddy-x/jorm/cache"
 	"github.com/godaddy-x/jorm/log"
 	"github.com/godaddy-x/jorm/sqlc"
@@ -173,7 +172,7 @@ func (self *MGOManager) initSlowLog() {
 				MaxBackups: 7,
 				MaxSize:    512,
 			}})
-		fmt.Println("MGO查询监控日志服务启动成功...")
+		log.Println("MGO查询监控日志服务启动成功...")
 	}
 }
 

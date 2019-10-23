@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"github.com/godaddy-x/jorm/cache"
 	"github.com/godaddy-x/jorm/dialect"
+	"github.com/godaddy-x/jorm/log"
 	"github.com/godaddy-x/jorm/sqlc"
 	"github.com/godaddy-x/jorm/util"
-	"log"
+	"go.uber.org/zap"
 	"reflect"
 )
 
 var (
-	RDBs = map[string]*RDBManager{}
+	rdbs        = map[string]*RDBManager{}
+	sql_slowlog *zap.Logger
 )
 
 /********************************** 数据库配置参数 **********************************/
@@ -183,6 +185,29 @@ type RDBManager struct {
 	Tx *sql.Tx
 }
 
+func (self *RDBManager) initSlowLog() {
+	if self.SlowQuery == 0 || len(self.SlowLogPath) == 0 {
+		return
+	}
+	if sql_slowlog == nil {
+		sql_slowlog = log.InitNewLog(&log.ZapConfig{
+			Level:   "warn",
+			Console: false,
+			FileConfig: &log.FileConfig{
+				Compress:   true,
+				Filename:   self.SlowLogPath,
+				MaxAge:     7,
+				MaxBackups: 7,
+				MaxSize:    512,
+			}})
+		log.Println("SQL查询监控日志服务启动成功...")
+	}
+}
+
+func (self *RDBManager) getSlowLog() *zap.Logger {
+	return sql_slowlog
+}
+
 func (self *RDBManager) GetDB(option ...Option) error {
 	var ds string
 	if option != nil && len(option) > 0 {
@@ -191,16 +216,20 @@ func (self *RDBManager) GetDB(option ...Option) error {
 	if len(ds) == 0 {
 		ds = MASTER
 	}
-	rdb := RDBs[ds]
+	rdb := rdbs[ds]
 	if rdb == nil {
 		return self.Error(util.AddStr("SQL数据源[", ds, "]未找到,请检查..."))
 	}
 	self.Db = rdb.Db
 	self.Debug = rdb.Debug
+	self.SlowQuery = rdb.SlowQuery
+	self.SlowLogPath = rdb.SlowLogPath
 	self.CacheSync = rdb.CacheSync
 	self.CacheManager = rdb.CacheManager
 	if option != nil && len(option) > 0 {
 		ops := option[0]
+		ops.SlowQuery = rdb.SlowQuery
+		ops.SlowLogPath = rdb.SlowLogPath
 		self.CacheSync = ops.CacheSync
 		if ops.AutoTx {
 			if tx, err := self.Db.Begin(); err != nil {
@@ -1737,8 +1766,19 @@ func (self *RDBManager) AddCacheSync(models ...interface{}) error {
 }
 
 func (self *RDBManager) debug(title, sql string, values interface{}, start int64) {
+	cost := util.Time() - start
+	if self.SlowQuery > 0 && cost > self.SlowQuery {
+		if title == "Count" || title == "FindOne" || title == "FindList" {
+			l := self.getSlowLog()
+			if l != nil {
+				l.Warn(title, log.Int64("cost", cost), log.String("sql", sql), log.Any("value", values))
+			}
+		}
+	}
 	if self.Debug {
-		str, _ := util.ObjectToJson(values)
-		log.Println(util.AddStr("mysql debug -> ", title, ": ", sql, " --- ", str, " --- cost: ", util.AnyToStr(util.Time()-start)))
+		if self.Debug {
+			str, _ := util.ObjectToJson(values)
+			log.Println(util.AddStr("mysql debug -> ", title, ": ", sql, " --- ", str, " --- cost: ", util.AnyToStr(util.Time()-start)))
+		}
 	}
 }

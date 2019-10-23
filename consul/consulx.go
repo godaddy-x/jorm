@@ -160,13 +160,16 @@ func (self *ConsulManager) ReadJsonConfig(node string, result interface{}) error
 }
 
 // 中心注册接口服务
-func (self *ConsulManager) AddRegistration(name string, iface interface{}) {
+func (self *ConsulManager) AddRegistration(name string, iface interface{}, ipname ...string) {
 	tof := reflect.TypeOf(iface)
 	vof := reflect.ValueOf(iface)
 	registration := new(consulapi.AgentServiceRegistration)
 	ip := util.GetLocalIP()
 	if ip == "" {
 		panic("内网IP读取失败,请检查...")
+	}
+	if ipname != nil && len(ipname) > 0 && len(ipname[0]) > 0 {
+		ip = ipname[0]
 	}
 	orname := reflect.Indirect(vof).Type().Name()
 	sname := orname
@@ -308,7 +311,7 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	conn, err = net.DialTimeout(protocol, host, time.Second*10)
 	if err != nil {
 		log.Error("consul服务连接失败", 0, log.String("ID", agentID), log.String("host", host), log.String("srv", srv), log.AddError(err))
-		return util.Error("[", agentID, "][", host, "]", "[", srv, "]连接失败: ", err)
+		return util.Error("[", host, "]", "[", srv, "]连接失败: ", err)
 	}
 	encBuf := bufio.NewWriter(conn)
 	codec := &gobClientCodec{conn, gob.NewDecoder(conn), gob.NewEncoder(encBuf), encBuf}
@@ -316,13 +319,11 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	err1 = cli.Call(srv, args, reply)
 	err2 = cli.Close()
 	if err1 != nil {
-		err = util.Error("[", agentID, "][", host, "]", "[", srv, "]访问失败: ", err1)
 		log.Error("consul服务访问失败", 0, log.String("ID", agentID), log.String("host", host), log.String("srv", srv), log.AddError(err1))
-		return err
+		return util.Error("[", host, "]", "[", srv, "]访问失败: ", err1)
 	} else if err2 != nil {
-		err = util.Error("[", agentID, "][", host, "]", "[", srv, "]关闭失败: ", err2)
 		log.Error("consul服务关闭失败", 0, log.String("ID", agentID), log.String("host", host), log.String("srv", srv), log.AddError(err2))
-		return err
+		return util.Error("[", host, "]", "[", srv, "]关闭失败: ", err2)
 	}
 	return nil
 }
