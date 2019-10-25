@@ -68,6 +68,7 @@ type CallInfo struct {
 	Tags     []string    // 服务标签名称
 	Domain   string      // 自定义访问域名,为空时自动填充内网IP
 	Iface    interface{} // 接口实现类实例
+	Package  string      // RPC服务包名
 	Service  string      // RPC服务名称
 	Method   string      // RPC方法名称
 	Protocol string      // RPC访问协议,默认TCP
@@ -82,7 +83,7 @@ func (self *ConsulManager) InitConfig(input ...ConsulConfig) (*ConsulManager, er
 		config.Address = conf.Host
 		client, err := consulapi.NewClient(config)
 		if err != nil {
-			panic(util.AddStr("连接", conf.Host, "Consul配置中心失败: ", err.Error()))
+			panic(util.AddStr("连接Consul[", conf.Host, "]配置中心失败: ", err.Error()))
 		}
 		manager := &ConsulManager{Consulx: client, Host: conf.Host}
 		data, err := manager.GetKV(conf.Node, client)
@@ -298,62 +299,6 @@ func (self *ConsulManager) GetService(service string) ([]*consulapi.AgentService
 	return result, nil
 }
 
-// 中心注册接口服务
-func (self *ConsulManager) AddRPC(callInfo ...*CallInfo) {
-	if len(callInfo) == 0 {
-		panic("服务对象列表为空,请检查...")
-	}
-	services, err := self.GetService("")
-	if err != nil {
-		panic(err)
-	}
-	for _, info := range callInfo {
-		tof := reflect.TypeOf(info.Iface)
-		vof := reflect.ValueOf(info.Iface)
-		registration := new(consulapi.AgentServiceRegistration)
-		addr := util.GetLocalIP()
-		if addr == "" {
-			panic("内网IP读取失败,请检查...")
-		}
-		if len(info.Domain) > 0 {
-			addr = info.Domain
-		}
-		srvName := reflect.Indirect(vof).Type().Name()
-		methods := []string{}
-		for m := 0; m < tof.NumMethod(); m++ {
-			method := tof.Method(m)
-			methods = append(methods, method.Name)
-		}
-		if len(methods) == 0 {
-			panic(util.AddStr("服务对象[", srvName, "]尚未有方法..."))
-		}
-		exist := false
-		for _, v := range services {
-			if v.Service == srvName && v.Address == addr {
-				exist = true
-				log.Println(util.AddStr("Consul服务[", v.Service, "][", v.Address, "]已存在,跳过注册"))
-				break
-			}
-		}
-		if exist {
-			continue
-		}
-		registration.ID = util.GetUUID()
-		registration.Name = srvName
-		registration.Tags = info.Tags
-		registration.Address = addr
-		registration.Port = self.Config.RpcPort
-		registration.Meta = make(map[string]string)
-		registration.Check = &consulapi.AgentServiceCheck{HTTP: fmt.Sprintf("http://%s:%d%s", registration.Address, self.Config.CheckPort, "/check"), Timeout: self.Config.Timeout, Interval: self.Config.Interval, DeregisterCriticalServiceAfter: self.Config.DestroyAfter,}
-		// 启动RPC服务
-		log.Println(util.AddStr("Consul服务[", registration.Name, "][", registration.Address, "]注册成功"))
-		if err := self.Consulx.Agent().ServiceRegister(registration); err != nil {
-			panic(util.AddStr("Consul注册[", srvName, "]服务失败: ", err.Error()))
-		}
-		rpc.Register(info.Iface)
-	}
-}
-
 // 获取RPC服务,并执行访问 args参数不可变,reply参数可变
 func (self *ConsulManager) CallService(srv string, args interface{}, reply interface{}) error {
 	if srv == "" {
@@ -446,6 +391,65 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	return nil
 }
 
+// 中心注册接口服务
+func (self *ConsulManager) AddRPC(callInfo ...*CallInfo) {
+	if len(callInfo) == 0 {
+		panic("服务对象列表为空,请检查...")
+	}
+	services, err := self.GetService("")
+	if err != nil {
+		panic(err)
+	}
+	for _, info := range callInfo {
+		tof := reflect.TypeOf(info.Iface)
+		vof := reflect.ValueOf(info.Iface)
+		registration := new(consulapi.AgentServiceRegistration)
+		addr := util.GetLocalIP()
+		if addr == "" {
+			panic("内网IP读取失败,请检查...")
+		}
+		if len(info.Domain) > 0 {
+			addr = info.Domain
+		}
+		srvName := reflect.Indirect(vof).Type().Name()
+		if len(info.Package) > 0 {
+			srvName = util.AddStr(info.Package, ".", srvName)
+		}
+		methods := []string{}
+		for m := 0; m < tof.NumMethod(); m++ {
+			method := tof.Method(m)
+			methods = append(methods, method.Name)
+		}
+		if len(methods) == 0 {
+			panic(util.AddStr("服务对象[", srvName, "]尚未有方法..."))
+		}
+		exist := false
+		for _, v := range services {
+			if v.Service == srvName && v.Address == addr {
+				exist = true
+				log.Println(util.AddStr("Consul服务[", v.Service, "][", v.Address, "]已存在,跳过注册"))
+				break
+			}
+		}
+		if exist {
+			continue
+		}
+		registration.ID = util.GetUUID()
+		registration.Name = srvName
+		registration.Tags = info.Tags
+		registration.Address = addr
+		registration.Port = self.Config.RpcPort
+		registration.Meta = make(map[string]string)
+		registration.Check = &consulapi.AgentServiceCheck{HTTP: fmt.Sprintf("http://%s:%d%s", registration.Address, self.Config.CheckPort, "/check"), Timeout: self.Config.Timeout, Interval: self.Config.Interval, DeregisterCriticalServiceAfter: self.Config.DestroyAfter,}
+		// 启动RPC服务
+		log.Println(util.AddStr("Consul服务[", registration.Name, "][", registration.Address, "]注册成功"))
+		if err := self.Consulx.Agent().ServiceRegister(registration); err != nil {
+			panic(util.AddStr("Consul注册[", srvName, "]服务失败: ", err.Error()))
+		}
+		rpc.Register(info.Iface)
+	}
+}
+
 // 获取RPC服务,并执行访问 args参数不可变,reply参数可变
 func (self *ConsulManager) CallRPC(callInfo *CallInfo) error {
 	if callInfo.Service == "" {
@@ -466,12 +470,16 @@ func (self *ConsulManager) CallRPC(callInfo *CallInfo) error {
 	if callInfo.Timeout == 0 {
 		callInfo.Timeout = 10
 	}
-	services, err := self.GetService(callInfo.Service)
+	serviceName := callInfo.Service
+	if len(callInfo.Package) > 0 {
+		serviceName = util.AddStr(callInfo.Package, ".", callInfo.Service)
+	}
+	services, err := self.GetService(serviceName)
 	if err != nil {
-		return util.Error("读取[", callInfo.Service, "]服务失败: ", err)
+		return util.Error("读取[", serviceName, "]服务失败: ", err)
 	}
 	if len(services) == 0 {
-		return util.Error("没有找到可用[", callInfo.Service, "]服务")
+		return util.Error("没有找到可用[", serviceName, "]服务")
 	}
 	var service *consulapi.AgentService
 	if self.Selection == nil { // 选取规则为空则默认随机
@@ -482,7 +490,7 @@ func (self *ConsulManager) CallRPC(callInfo *CallInfo) error {
 	}
 	monitor := MonitorLog{
 		ConsulHost:  self.Config.Host,
-		ServiceName: callInfo.Service,
+		ServiceName: serviceName,
 		MethodName:  callInfo.Method,
 		RpcPort:     service.Port,
 		RpcHost:     service.Address,
