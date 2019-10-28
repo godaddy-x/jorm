@@ -279,7 +279,7 @@ func (self *ConsulManager) RemoveService(serviceIDs ...string) {
 }
 
 // 根据服务名获取可用列表
-func (self *ConsulManager) GetService(service string) ([]*consulapi.AgentService, error) {
+func (self *ConsulManager) GetAllService(service string) ([]*consulapi.AgentService, error) {
 	result := []*consulapi.AgentService{}
 	services, err := self.Consulx.Agent().Services()
 	if err != nil {
@@ -295,6 +295,18 @@ func (self *ConsulManager) GetService(service string) ([]*consulapi.AgentService
 		if service == v.Service {
 			result = append(result, v)
 		}
+	}
+	return result, nil
+}
+
+func (self *ConsulManager) GetHealthService(service string) ([]*consulapi.AgentService, error) {
+	result := []*consulapi.AgentService{}
+	serviceEntry, _, err := self.Consulx.Health().Service("", service, false, &consulapi.QueryOptions{})
+	if err != nil {
+		return result, err
+	}
+	for _, v := range serviceEntry {
+		result = append(result, v.Service)
 	}
 	return result, nil
 }
@@ -396,7 +408,7 @@ func (self *ConsulManager) AddRPC(callInfo ...*CallInfo) {
 	if len(callInfo) == 0 {
 		panic("服务对象列表为空,请检查...")
 	}
-	services, err := self.GetService("")
+	services, err := self.GetAllService("")
 	if err != nil {
 		panic(err)
 	}
@@ -475,7 +487,7 @@ func (self *ConsulManager) CallRPC(callInfo *CallInfo) error {
 	if len(callInfo.Package) > 0 {
 		serviceName = util.AddStr(callInfo.Package, ".", callInfo.Service)
 	}
-	services, err := self.GetService(serviceName)
+	services, err := self.GetHealthService(serviceName)
 	if err != nil {
 		return util.Error("读取[", serviceName, "]服务失败: ", err)
 	}
