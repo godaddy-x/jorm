@@ -13,7 +13,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"fmt"
-	"github.com/bwmarrin/snowflake"
+	"github.com/godaddy-x/jorm/snowflake"
 	"github.com/godaddy-x/jorm/sqlc"
 	"github.com/json-iterator/go"
 	"github.com/shopspring/decimal"
