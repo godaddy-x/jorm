@@ -301,7 +301,7 @@ func (self *ConsulManager) GetAllService(service string) ([]*consulapi.AgentServ
 
 func (self *ConsulManager) GetHealthService(service string) ([]*consulapi.AgentService, error) {
 	result := []*consulapi.AgentService{}
-	serviceEntry, _, err := self.Consulx.Health().Service("", service, false, &consulapi.QueryOptions{})
+	serviceEntry, _, err := self.Consulx.Health().Service(service, "", false, &consulapi.QueryOptions{})
 	if err != nil {
 		return result, err
 	}
@@ -427,7 +427,6 @@ func (self *ConsulManager) AddRPC(callInfo ...*CallInfo) {
 		if len(info.Package) > 0 {
 			srvName = util.AddStr(info.Package, ".", srvName)
 		}
-		info.Tags = append(info.Tags, srvName)
 		methods := []string{}
 		for m := 0; m < tof.NumMethod(); m++ {
 			method := tof.Method(m)
