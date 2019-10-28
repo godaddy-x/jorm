@@ -415,6 +415,7 @@ func (self *ConsulManager) AddRPC(callInfo ...*CallInfo) {
 		if len(info.Package) > 0 {
 			srvName = util.AddStr(info.Package, ".", srvName)
 		}
+		info.Tags = append(info.Tags, srvName)
 		methods := []string{}
 		for m := 0; m < tof.NumMethod(); m++ {
 			method := tof.Method(m)
