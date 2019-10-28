@@ -28,7 +28,7 @@ type ConsulManager struct {
 	Host      string
 	Consulx   *consulapi.Client
 	Config    *ConsulConfig
-	Selection func([]*consulapi.AgentService) *consulapi.AgentService
+	Selection func([]*consulapi.ServiceEntry) *consulapi.ServiceEntry
 }
 
 // Consulx配置参数
@@ -299,16 +299,12 @@ func (self *ConsulManager) GetAllService(service string) ([]*consulapi.AgentServ
 	return result, nil
 }
 
-func (self *ConsulManager) GetHealthService(service string) ([]*consulapi.AgentService, error) {
-	result := []*consulapi.AgentService{}
+func (self *ConsulManager) GetHealthService(service string) ([]*consulapi.ServiceEntry, error) {
 	serviceEntry, _, err := self.Consulx.Health().Service(service, "", false, &consulapi.QueryOptions{})
 	if err != nil {
-		return result, err
+		return []*consulapi.ServiceEntry{}, err
 	}
-	for _, v := range serviceEntry {
-		result = append(result, v.Service)
-	}
-	return result, nil
+	return serviceEntry, nil
 }
 
 // 获取RPC服务,并执行访问 args参数不可变,reply参数可变
@@ -496,9 +492,9 @@ func (self *ConsulManager) CallRPC(callInfo *CallInfo) error {
 	var service *consulapi.AgentService
 	if self.Selection == nil { // 选取规则为空则默认随机
 		r := rand.New(rand.NewSource(util.GetUUIDInt64()))
-		service = services[r.Intn(len(services))]
+		service = services[r.Intn(len(services))].Service
 	} else {
-		service = self.Selection(services)
+		service = self.Selection(services).Service
 	}
 	monitor := MonitorLog{
 		ConsulHost:  self.Config.Host,
