@@ -438,6 +438,7 @@ func (self *ConsulManager) AddRPC(callInfo ...*CallInfo) {
 			if v.Service == srvName && v.Address == addr {
 				exist = true
 				log.Println(util.AddStr("Consul服务[", v.Service, "][", v.Address, "]已存在,跳过注册"))
+				rpc.Register(info.Iface)
 				break
 			}
 		}
