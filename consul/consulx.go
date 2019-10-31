@@ -382,10 +382,10 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	conn, err = net.DialTimeout(protocol, host, time.Second*10)
 	if err != nil {
 		log.Error("consul服务连接失败", 0, log.String("ID", agentID), log.String("host", host), log.String("srv", srv), log.AddError(err))
-		return util.Error("[", host, "]", "[", srv, "]连接失败: ", err)
+		return util.Error("RPC连接失败: ", err)
 	}
 	defer conn.Close()
-	conn.SetReadDeadline(time.Now().Add(time.Second * 10))
+	conn.SetReadDeadline(time.Now().Add(time.Minute * 1))
 	encBuf := bufio.NewWriter(conn)
 	codec := &gobClientCodec{conn, gob.NewDecoder(conn), gob.NewEncoder(encBuf), encBuf}
 	cli := rpc.NewClientWithCodec(codec)
@@ -393,10 +393,10 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	err2 = cli.Close()
 	if err1 != nil {
 		log.Error("consul服务访问失败", 0, log.String("ID", agentID), log.String("host", host), log.String("srv", srv), log.AddError(err1))
-		return util.Error("[", host, "]", "[", srv, "]访问失败: ", err1)
+		return util.Error("RPC访问失败: ", err1)
 	} else if err2 != nil {
 		log.Error("consul服务关闭失败", 0, log.String("ID", agentID), log.String("host", host), log.String("srv", srv), log.AddError(err2))
-		return util.Error("[", host, "]", "[", srv, "]关闭失败: ", err2)
+		return util.Error("RPC关闭失败: ", err2)
 	}
 	return nil
 }
@@ -512,20 +512,22 @@ func (self *ConsulManager) CallRPC(callInfo *CallInfo) error {
 	var err1, err2 error
 	conn, err = net.DialTimeout(callInfo.Protocol, util.AddStr(service.Address, ":", self.Config.ListenProt), time.Second*time.Duration(callInfo.Timeout))
 	if err != nil {
-		log.Error("consul服务连接失败", 0, log.String("ID", service.ID), log.String("host", service.Address), log.String("srv", service.Service), log.AddError(err))
-		return util.Error("[", service.Address, "]", "[", service.Service, "]连接失败: ", err)
+		log.Error("consul服务连接失败", 0, log.String("host", service.Address), log.String("srv", service.Service), log.AddError(err))
+		return util.Error("RPC连接失败: ", err)
 	}
+	defer conn.Close()
+	conn.SetReadDeadline(time.Now().Add(time.Second * time.Duration(callInfo.Timeout)))
 	encBuf := bufio.NewWriter(conn)
 	codec := &gobClientCodec{conn, gob.NewDecoder(conn), gob.NewEncoder(encBuf), encBuf}
 	cli := rpc.NewClientWithCodec(codec)
 	err1 = cli.Call(util.AddStr(callInfo.Service, ".", callInfo.Method), callInfo.Request, callInfo.Response)
 	err2 = cli.Close()
 	if err1 != nil {
-		log.Error("consul服务访问失败", 0, log.String("ID", service.ID), log.String("host", service.Address), log.String("srv", service.Service), log.AddError(err1))
-		return util.Error("[", service.Address, "]", "[", service.Service, "]访问失败: ", err1)
+		log.Error("consul服务访问失败", 0, log.String("host", service.Address), log.String("srv", service.Service), log.AddError(err1))
+		return util.Error("RPC访问失败: ", err1)
 	} else if err2 != nil {
-		log.Error("consul服务关闭失败", 0, log.String("ID", service.ID), log.String("host", service.Address), log.String("srv", service.Service), log.AddError(err2))
-		return util.Error("[", service.Address, "]", "[", service.Service, "]关闭失败: ", err2)
+		log.Error("consul服务关闭失败", 0, log.String("host", service.Address), log.String("srv", service.Service), log.AddError(err2))
+		return util.Error("RPC关闭失败: ", err2)
 	}
 	return nil
 }
