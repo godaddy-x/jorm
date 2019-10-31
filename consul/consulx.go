@@ -384,6 +384,8 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 		log.Error("consul服务连接失败", 0, log.String("ID", agentID), log.String("host", host), log.String("srv", srv), log.AddError(err))
 		return util.Error("[", host, "]", "[", srv, "]连接失败: ", err)
 	}
+	defer conn.Close()
+	conn.SetReadDeadline(time.Now().Add(time.Second * 10))
 	encBuf := bufio.NewWriter(conn)
 	codec := &gobClientCodec{conn, gob.NewDecoder(conn), gob.NewEncoder(encBuf), encBuf}
 	cli := rpc.NewClientWithCodec(codec)
