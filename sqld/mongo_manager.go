@@ -453,6 +453,39 @@ func (self *MGOManager) FindList(cnd *sqlc.Cnd, data interface{}) error {
 	return nil
 }
 
+// 根据条件更新数据
+func (self *MGOManager) UpdateByCnd(cnd *sqlc.Cnd) error {
+	start := util.Time()
+	if cnd.Model == nil {
+		return self.Error("ORM对象类型不能为空,请通过M(...)方法设置对象类型")
+	}
+	copySession := self.Session.Copy()
+	defer copySession.Close()
+	db, err := self.GetDatabase(copySession, cnd.Model)
+	if err != nil {
+		return self.Error(err)
+	}
+	match := buildMongoMatch(cnd)
+	upset := buildMongoUpset(cnd)
+	if len(upset) == 0 {
+		return util.Error("更新条件不能为空")
+	}
+	a := bson.M{}
+	b := bson.M{}
+	if err := util.JsonToAny(&match, &a); err != nil {
+		return err
+	}
+	if err := util.JsonToAny(&upset, &b); err != nil {
+		return err
+	}
+	defer self.debug("UpdateByCnd", map[string]interface{}{"match": match, "upset": upset}, start)
+	_, err = db.UpdateAll(a, b)
+	if err != nil {
+		return self.Error(util.AddStr("mongo按条件数据失败: ", err.Error()))
+	}
+	return nil
+}
+
 func (self *MGOManager) Close() error {
 	// self.Session.Close()
 	return nil
@@ -610,6 +643,15 @@ func buildMongoMatch(cnd *sqlc.Cnd) map[string]interface{} {
 			}
 			query["$or"] = array
 		}
+	}
+	return query
+}
+
+// 构建mongo字段更新命令
+func buildMongoUpset(cnd *sqlc.Cnd) map[string]interface{} {
+	query := make(map[string]interface{})
+	if len(cnd.UpdateKV) > 0 {
+		query["$set"] = cnd.UpdateKV
 	}
 	return query
 }

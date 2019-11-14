@@ -54,6 +54,7 @@ type DBManager struct {
 	Debug        bool          // debug模式
 	CacheManager cache.ICache  // 缓存管理器
 	CacheObject  []interface{} // 需要缓存的数据 CacheSync为true时有效
+	CacheCnd     *sqlc.Cnd     // 需要缓存的条件对象 CacheSync为true时有效
 	Errors       []error       // 错误异常记录
 }
 
@@ -69,6 +70,8 @@ type IDBase interface {
 	Save(datas ...interface{}) error
 	// 更新数据
 	Update(datas ...interface{}) error
+	// 按条件更新数据
+	UpdateByCnd(cnd *sqlc.Cnd) error
 	// 删除数据
 	Delete(datas ...interface{}) error
 	// 统计数据
@@ -109,6 +112,10 @@ func (self *DBManager) Save(datas ...interface{}) error {
 
 func (self *DBManager) Update(datas ...interface{}) error {
 	return util.Error("No implementation method [Update] was found")
+}
+
+func (self *DBManager) UpdateByCnd(cnd *sqlc.Cnd) error {
+	return util.Error("No implementation method [UpdateByCnd] was found")
 }
 
 func (self *DBManager) Delete(datas ...interface{}) error {
@@ -491,6 +498,61 @@ func (self *RDBManager) Update(datas ...interface{}) error {
 		}
 	}
 	return self.AddCacheSync(datas...)
+}
+
+func (self *RDBManager) UpdateByCnd(cnd *sqlc.Cnd) error {
+	start := util.Time()
+	var elem = cnd.Model
+	if elem == nil {
+		return self.Error("ORM对象类型不能为空,请通过M(...)方法设置对象类型")
+	}
+	if len(cnd.UpdateKV) == 0 {
+		return self.Error("更新条件不能为空")
+	}
+	var fieldPart1, fieldPart2 bytes.Buffer
+	var valuePart = make([]interface{}, 0)
+	for k, v := range cnd.UpdateKV {
+		fieldPart1.WriteString(k)
+		fieldPart1.WriteString(" = ?,")
+		valuePart = append(valuePart, v)
+	}
+	part, args := self.BuildWhereCase(cnd)
+	for e := range args {
+		valuePart = append(valuePart, args[e])
+	}
+	if part.Len() > 0 {
+		fieldPart2.WriteString(" where ")
+		s := part.String()
+		fieldPart2.WriteString(util.Substr(s, 0, len(s)-3))
+	}
+	s1 := fieldPart1.String()
+	s2 := fieldPart2.String()
+	var sqlbuf bytes.Buffer
+	sqlbuf.WriteString("update ")
+	if tb, err := util.GetDbAndTb(elem); err != nil {
+		return self.Error(err)
+	} else {
+		sqlbuf.WriteString(tb)
+	}
+	sqlbuf.WriteString(" set ")
+	sqlbuf.WriteString(util.Substr(s1, 0, len(s1)-1))
+	sqlbuf.WriteString(util.Substr(s2, 0, len(s2)-1))
+	defer self.debug("UpdateByCnd", sqlbuf.String(), valuePart, start)
+	var stmt *sql.Stmt
+	var err error
+	if self.AutoTx {
+		stmt, err = self.Tx.Prepare(sqlbuf.String())
+	} else {
+		stmt, err = self.Db.Prepare(sqlbuf.String())
+	}
+	if err != nil {
+		return self.Error(util.AddStr("预编译sql[", sqlbuf.String(), "]失败: ", err.Error()))
+	}
+	defer stmt.Close()
+	if _, err := stmt.Exec(valuePart...); err != nil {
+		return self.Error(util.AddStr("更新数据失败: ", err.Error()))
+	}
+	return self.AddCacheSync2(cnd)
 }
 
 func (self *RDBManager) Delete(datas ...interface{}) error {
@@ -1333,6 +1395,11 @@ func (self *RDBManager) Close() error {
 			}
 		}
 	}
+	if self.Errors == nil && len(self.Errors) == 0 && self.CacheSync && self.CacheCnd != nil {
+		if err := self.mongoSyncData2(self.CacheCnd); err != nil {
+			log.Print(err.Error())
+		}
+	}
 	return nil
 }
 
@@ -1352,6 +1419,23 @@ func (self *RDBManager) mongoSyncData(data interface{}) error {
 			} else {
 				return util.Error("同步mongo数据失败: ", s, ", 异常: ", err.Error())
 			}
+		}
+	}
+	return nil
+}
+
+// mongo同步条件数据
+func (self *RDBManager) mongoSyncData2(cnd *sqlc.Cnd) error {
+	if sync, err := util.ValidSyncMongo(cnd.Model); err != nil {
+		return util.Error("实体字段异常: ", err.Error())
+	} else if sync {
+		mongo, err := new(MGOManager).Get(self.Option);
+		if err != nil {
+			return util.Error("获取mongo连接失败: ", err.Error())
+		}
+		defer mongo.Close()
+		if err := mongo.UpdateByCnd(cnd); err != nil {
+			return util.Error("同步mongo数据失败: ", err.Error())
 		}
 	}
 	return nil
@@ -1765,10 +1849,18 @@ func (self *RDBManager) AddCacheSync(models ...interface{}) error {
 	return nil
 }
 
+// 添加缓存同步对象
+func (self *RDBManager) AddCacheSync2(cnd *sqlc.Cnd) error {
+	if self.CacheSync && cnd.UpdateKV != nil && len(cnd.UpdateKV) > 0 {
+		self.CacheCnd = cnd
+	}
+	return nil
+}
+
 func (self *RDBManager) debug(title, sql string, values interface{}, start int64) {
 	cost := util.Time() - start
 	if self.SlowQuery > 0 && cost > self.SlowQuery {
-		if title == "Count" || title == "FindOne" || title == "FindList" {
+		if title == "Count" || title == "FindOne" || title == "FindList" || title == "UpdateByCnd" {
 			l := self.getSlowLog()
 			if l != nil {
 				l.Warn(title, log.Int64("cost", cost), log.String("sql", sql), log.Any("value", values))
