@@ -22,6 +22,8 @@ type CountResult struct {
 }
 
 const (
+	JID      = "id"
+	BID      = "_id"
 	COUNT_BY = "COUNT_BY"
 	MASTER   = "MASTER"
 )
@@ -467,19 +469,14 @@ func (self *MGOManager) UpdateByCnd(cnd *sqlc.Cnd) error {
 	}
 	match := buildMongoMatch(cnd)
 	upset := buildMongoUpset(cnd)
+	if len(match) == 0 {
+		return util.Error("筛选条件不能为空")
+	}
 	if len(upset) == 0 {
 		return util.Error("更新条件不能为空")
 	}
-	a := bson.M{}
-	b := bson.M{}
-	if err := util.JsonToAny(&match, &a); err != nil {
-		return err
-	}
-	if err := util.JsonToAny(&upset, &b); err != nil {
-		return err
-	}
 	defer self.debug("UpdateByCnd", map[string]interface{}{"match": match, "upset": upset}, start)
-	_, err = db.UpdateAll(a, b)
+	_, err = db.UpdateAll(match, upset)
 	if err != nil {
 		return self.Error(util.AddStr("mongo按条件数据失败: ", err.Error()))
 	}
@@ -578,8 +575,8 @@ func buildMongoMatch(cnd *sqlc.Cnd) map[string]interface{} {
 	for e := range condits {
 		condit := condits[e]
 		key := condit.Key
-		if key == "id" {
-			key = "_id"
+		if key == JID {
+			key = BID
 		}
 		value := condit.Value
 		values := condit.Values
@@ -656,8 +653,8 @@ func buildMongoUpset(cnd *sqlc.Cnd) map[string]interface{} {
 	if len(cnd.UpdateKV) > 0 {
 		tmp := map[string]interface{}{}
 		for k, v := range cnd.UpdateKV {
-			if k == "id" {
-				tmp["_id"] = v
+			if k == JID {
+				tmp[BID] = v
 			} else {
 				tmp[k] = v
 			}
@@ -670,9 +667,12 @@ func buildMongoUpset(cnd *sqlc.Cnd) map[string]interface{} {
 // 构建mongo字段筛选命令
 func buildMongoProject(cnd *sqlc.Cnd) map[string]int {
 	var project = make(map[string]int)
-	anyFields := cnd.AnyFields
-	for e := range anyFields {
-		project[anyFields[e]] = 1
+	for _, v := range cnd.AnyFields {
+		if v == JID {
+			project[BID] = 1
+		} else {
+			project[v] = 1
+		}
 	}
 	return project
 }
@@ -681,12 +681,19 @@ func buildMongoProject(cnd *sqlc.Cnd) map[string]int {
 func buildMongoSortBy(cnd *sqlc.Cnd) map[string]int {
 	var sortby = make(map[string]int)
 	orderbys := cnd.Orderbys
-	for e := range orderbys {
-		orderby := orderbys[e]
+	for _, orderby := range orderbys {
 		if orderby.Value == sqlc.DESC_ {
-			sortby[orderby.Key] = -1
+			if orderby.Key == JID {
+				sortby[BID] = -1
+			} else {
+				sortby[orderby.Key] = -1
+			}
 		} else if orderby.Value == sqlc.ASC_ {
-			sortby[orderby.Key] = 1
+			if orderby.Key == JID {
+				sortby[BID] = 1
+			} else {
+				sortby[orderby.Key] = 1
+			}
 		}
 	}
 	return sortby
@@ -699,11 +706,11 @@ func buildSummary(cnd *sqlc.Cnd) map[string]interface{} {
 		return nil
 	}
 	tmp := make(map[string]interface{})
-	tmp["_id"] = 0
+	tmp[BID] = 0
 	for k, v := range cnd.Summaries {
 		key := k
-		if key == "_id" {
-			key = "id"
+		if key == BID {
+			key = JID
 		}
 		if v == sqlc.SUM_ {
 			tmp[key] = map[string]interface{}{"$sum": util.AddStr("$", k)}
