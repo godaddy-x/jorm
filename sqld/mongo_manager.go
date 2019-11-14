@@ -578,6 +578,9 @@ func buildMongoMatch(cnd *sqlc.Cnd) map[string]interface{} {
 	for e := range condits {
 		condit := condits[e]
 		key := condit.Key
+		if key == "id" {
+			key = "_id"
+		}
 		value := condit.Value
 		values := condit.Values
 		switch condit.Logic {
@@ -651,7 +654,15 @@ func buildMongoMatch(cnd *sqlc.Cnd) map[string]interface{} {
 func buildMongoUpset(cnd *sqlc.Cnd) map[string]interface{} {
 	query := make(map[string]interface{})
 	if len(cnd.UpdateKV) > 0 {
-		query["$set"] = cnd.UpdateKV
+		tmp := map[string]interface{}{}
+		for k, v := range cnd.UpdateKV {
+			if k == "id" {
+				tmp["_id"] = v
+			} else {
+				tmp[k] = v
+			}
+		}
+		query["$set"] = tmp
 	}
 	return query
 }
