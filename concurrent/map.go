@@ -24,9 +24,9 @@ func (self *Map) Get(key string, callfun func(key string) (interface{}, error)) 
 	var b bool
 	var v interface{}
 	var err error
-	self.lock.RLock()
+	//self.lock.RLock()
 	if v, b = self.data[key]; !b {
-		self.lock.RUnlock()
+		//self.lock.RUnlock()
 		self.lock.Lock()
 		if v, b = self.data[key]; !b {
 			v, err = callfun(key)
@@ -36,7 +36,7 @@ func (self *Map) Get(key string, callfun func(key string) (interface{}, error)) 
 		}
 		self.lock.Unlock()
 	} else {
-		self.lock.RUnlock()
+		//self.lock.RUnlock()
 	}
 	return v, err
 }
