@@ -633,3 +633,46 @@ func GetPath() string {
 		return path
 	}
 }
+
+// 获取当月份开始和结束时间
+func GetMonthFirstAndLast() (int64, int64) {
+	now := time.Now()
+	currentYear, currentMonth, _ := now.Date()
+	firstOfMonth := time.Date(currentYear, currentMonth, 1, 0, 0, 0, 0, now.Location())
+	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
+	return Time(firstOfMonth), Time(lastOfMonth) + 86400000 - 1
+}
+
+// 获取指定月份开始和结束时间
+func GetAnyMonthFirstAndLast(month int) (int64, int64) {
+	now := time.Now()
+	currentYear, currentMonth, _ := now.Date()
+	cmonth := int(currentMonth)
+	offset := month - cmonth
+	if month < 1 || month > 12 {
+		offset = 0
+	}
+	firstOfMonth := time.Date(currentYear, currentMonth, 1, 0, 0, 0, 0, now.Location()).AddDate(0, offset, 0)
+	lastOfMonth := firstOfMonth.AddDate(0, 1, -1)
+	return Time(firstOfMonth), Time(lastOfMonth) + 86400000 - 1
+}
+
+// 获取当周开始和结束时间
+func GetWeekFirstAndLast() (int64, int64) {
+	now := time.Now()
+	offset := int(time.Monday - now.Weekday())
+	if offset > 0 {
+		offset = -6
+	}
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, offset)
+	first := Time(start)
+	return first, first + 604800000 - 1
+}
+
+// 获取当天开始和结束时间
+func GetDayFirstAndLast() (int64, int64) {
+	now := time.Now()
+	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	first := Time(start)
+	return first, first + 86400000 - 1
+}
