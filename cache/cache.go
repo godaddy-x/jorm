@@ -24,6 +24,10 @@ type ICache interface {
 	Values(pattern ...string) ([]interface{}, error)
 	// 清空全部key-value
 	Flush() error
+	// 查询队列数据
+	Brpop(key string, expire int64, result interface{}) error
+	// 发送队列数据
+	Rpush(key string, val interface{}) error
 }
 
 func (self *CacheManager) Get(key string, input interface{}) (bool, error) {
@@ -52,4 +56,12 @@ func (self *CacheManager) Values(pattern ...string) ([]interface{}, error) {
 
 func (self *CacheManager) Flush() error {
 	return util.Error("No implementation method [Flush] was found")
+}
+
+func (self *CacheManager) Brpop(key string, expire int64, result interface{}) error {
+	return util.Error("No implementation method [Brpop] was found")
+}
+
+func (self *CacheManager) Rpush(key string, val interface{}) error {
+	return util.Error("No implementation method [Rpush] was found")
 }

@@ -163,3 +163,34 @@ func (self *RedisManager) Values(pattern ...string) ([]interface{}, error) {
 func (self *RedisManager) Flush() error {
 	return util.Error("No implementation method [Flush] was found")
 }
+
+func (self *RedisManager) Brpop(key string, expire int64, result interface{}) error {
+	if len(key) == 0 || expire <= 0 {
+		return nil
+	}
+	client := self.Pool.Get()
+	defer client.Close()
+	ret, err := redis.ByteSlices(client.Do("BRPOP", key, expire))
+	if err != nil {
+		return err
+	} else if len(ret) != 2 {
+		return util.Error("data len error")
+	}
+	if err := util.JsonToObject(string(ret[1]), &result); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (self *RedisManager) Rpush(key string, val interface{}) error {
+	if val == nil || len(key) == 0 {
+		return nil
+	}
+	client := self.Pool.Get()
+	defer client.Close()
+	_, err := client.Do("RPUSH", key, util.AnyToStr(val))
+	if err != nil {
+		return err
+	}
+	return nil
+}
