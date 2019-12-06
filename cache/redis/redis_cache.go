@@ -182,13 +182,17 @@ func (self *RedisManager) Brpop(key string, expire int64, result interface{}) er
 	return nil
 }
 
-func (self *RedisManager) Rpush(key string, val interface{}) error {
-	if val == nil || len(key) == 0 {
+func (self *RedisManager) Rpush(key string, input interface{}) error {
+	if input == nil || len(key) == 0 {
 		return nil
+	}
+	value, err := util.ObjectToJson(input)
+	if err != nil {
+		return err
 	}
 	client := self.Pool.Get()
 	defer client.Close()
-	_, err := client.Do("RPUSH", key, util.AnyToStr(val))
+	_, err = client.Do("RPUSH", key, value)
 	if err != nil {
 		return err
 	}
