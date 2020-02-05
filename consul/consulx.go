@@ -175,6 +175,24 @@ func (self *ConsulManager) ReadJsonConfig(node string, result interface{}) error
 	}
 }
 
+func (self *ConsulManager) ClearTagService(tag string) {
+	services, err := self.Consulx.Agent().Services()
+	if err != nil {
+		panic(err)
+	}
+	for _, v := range services {
+		for _, v1 := range v.Tags {
+			if v1 == tag {
+				if err := self.Consulx.Agent().ServiceDeregister(v.ID); err != nil {
+					log.Println(err)
+				}
+				log.Println("移除服务成功: ", v.Service, " - ", v.ID, " - ", v1)
+			}
+		}
+
+	}
+}
+
 // 中心注册接口服务
 func (self *ConsulManager) AddRegistration(name string, iface interface{}, ipname ...string) {
 	tof := reflect.TypeOf(iface)
