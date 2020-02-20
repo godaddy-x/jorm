@@ -676,3 +676,33 @@ func GetDayFirstAndLast() (int64, int64) {
 	first := Time(start)
 	return first, first + 86400000 - 1
 }
+
+// 检测int数值是否在区间
+func CheckInt(c int, vs ...int) bool {
+	for _, v := range vs {
+		if v == c {
+			return true
+		}
+	}
+	return false
+}
+
+// 检测int64数值是否在区间
+func CheckInt64(c int64, vs ...int64) bool {
+	for _, v := range vs {
+		if v == c {
+			return true
+		}
+	}
+	return false
+}
+
+// 检测string数值是否在区间
+func CheckStr(c string, vs ...string) bool {
+	for _, v := range vs {
+		if v == c {
+			return true
+		}
+	}
+	return false
+}
