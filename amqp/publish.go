@@ -20,10 +20,17 @@ type PublishManager struct {
 }
 
 type PublishMQ struct {
-	channel  *amqp.Channel
-	mu       sync.Mutex
-	exchange string
-	queue    string
+	channel   *amqp.Channel
+	channel_q amqp.Queue
+	mu        sync.Mutex
+	exchange  string
+	queue     string
+}
+
+type QueueData struct {
+	Name      string
+	Messages  int
+	Consumers int
 }
 
 func (self *PublishManager) InitConfig(input ...AmqpConfig) *PublishManager {
@@ -53,6 +60,27 @@ func (self *PublishManager) Client(dsname ...string) (*PublishManager, error) {
 	}
 	manager := publish_mgrs[ds]
 	return manager, nil
+}
+
+// 客户端数 - 通道消息数
+func (self *PublishManager) GetChannel(data MsgData) (*QueueData, error) {
+	pub, ok := self.channels[data.Exchange+data.Queue]
+	if !ok {
+		self.mu.Lock()
+		defer self.mu.Unlock()
+		pub, ok = self.channels[data.Exchange+data.Queue]
+		if !ok {
+			channel, err := self.conn.Channel()
+			if err != nil {
+				return nil, err
+			}
+			pub = &PublishMQ{channel: channel, exchange: data.Exchange, queue: data.Queue,}
+			pub.prepareExchange()
+			pub.prepareQueue()
+			self.channels[data.Exchange+data.Queue] = pub
+		}
+	}
+	return &QueueData{Name: pub.channel_q.Name, Messages: pub.channel_q.Messages, Consumers: pub.channel_q.Consumers}, nil
 }
 
 func (self *PublishManager) Publish(data MsgData) error {
@@ -104,8 +132,10 @@ func (self *PublishMQ) prepareExchange() error {
 }
 
 func (self *PublishMQ) prepareQueue() error {
-	if _, err := self.channel.QueueDeclare(self.queue, true, false, false, false, nil); err != nil {
+	if q, err := self.channel.QueueDeclare(self.queue, true, false, false, false, nil); err != nil {
 		return err
+	} else {
+		self.channel_q = q
 	}
 	if err := self.channel.QueueBind(self.queue, self.queue, self.exchange, false, nil); err != nil {
 		return err
