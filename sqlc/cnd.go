@@ -36,6 +36,7 @@ const (
 	AVG_
 	MIN_
 	MAX_
+	CNT_
 )
 
 var (
@@ -55,6 +56,7 @@ type Condition struct {
 	Key    string
 	Value  interface{}
 	Values []interface{}
+	Alias  string
 }
 
 // 连接表条件对象
@@ -85,6 +87,7 @@ type Cnd struct {
 	FromCond    FromCond
 	JoinCond    []JoinCond
 	CacheConfig CacheConfig
+	Aggregates  []Condition
 }
 
 // 缓存结果集参数
@@ -106,6 +109,7 @@ func M(model interface{}) *Cnd {
 		Summaries:  make(map[string]int),
 		UpdateKV:   make(map[string]interface{}),
 		Model:      model,
+		Aggregates: make([]Condition, 0),
 	}
 }
 
@@ -117,73 +121,73 @@ func addDefaultCondit(cnd *Cnd, condit Condition) *Cnd {
 
 // =
 func (self *Cnd) Eq(key string, value interface{}) *Cnd {
-	condit := Condition{EQ_, key, value, nil}
+	condit := Condition{EQ_, key, value, nil, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // <>
 func (self *Cnd) NotEq(key string, value interface{}) *Cnd {
-	condit := Condition{NOT_EQ_, key, value, nil}
+	condit := Condition{NOT_EQ_, key, value, nil, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // <
 func (self *Cnd) Lt(key string, value interface{}) *Cnd {
-	condit := Condition{LT_, key, value, nil}
+	condit := Condition{LT_, key, value, nil, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // <=
 func (self *Cnd) Lte(key string, value interface{}) *Cnd {
-	condit := Condition{LTE_, key, value, nil}
+	condit := Condition{LTE_, key, value, nil, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // >
 func (self *Cnd) Gt(key string, value interface{}) *Cnd {
-	condit := Condition{GT_, key, value, nil}
+	condit := Condition{GT_, key, value, nil, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // >=
 func (self *Cnd) Gte(key string, value interface{}) *Cnd {
-	condit := Condition{GTE_, key, value, nil}
+	condit := Condition{GTE_, key, value, nil, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // is null
 func (self *Cnd) IsNull(key string) *Cnd {
-	condit := Condition{IS_NULL_, key, nil, nil}
+	condit := Condition{IS_NULL_, key, nil, nil, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // is not null
 func (self *Cnd) IsNotNull(key string) *Cnd {
-	condit := Condition{IS_NOT_NULL_, key, nil, nil}
+	condit := Condition{IS_NOT_NULL_, key, nil, nil, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // between
 func (self *Cnd) Between(key string, value1 interface{}, value2 interface{}) *Cnd {
-	condit := Condition{BETWEEN_, key, nil, []interface{}{value1, value2}}
+	condit := Condition{BETWEEN_, key, nil, []interface{}{value1, value2}, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // not between
 func (self *Cnd) NotBetween(key string, value1 interface{}, value2 interface{}) *Cnd {
-	condit := Condition{NOT_BETWEEN_, key, nil, []interface{}{value1, value2}}
+	condit := Condition{NOT_BETWEEN_, key, nil, []interface{}{value1, value2}, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // in
 func (self *Cnd) In(key string, values ...interface{}) *Cnd {
-	condit := Condition{IN_, key, nil, values}
+	condit := Condition{IN_, key, nil, values, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // not in
 func (self *Cnd) NotIn(key string, values ...interface{}) *Cnd {
-	condit := Condition{NOT_IN_, key, nil, values}
+	condit := Condition{NOT_IN_, key, nil, values, ""}
 	return addDefaultCondit(self, condit)
 }
 
@@ -195,19 +199,19 @@ func (self *Cnd) Summary(logic int, key string) *Cnd {
 
 // like
 func (self *Cnd) Like(key string, value interface{}) *Cnd {
-	condit := Condition{LIKE_, key, value, nil}
+	condit := Condition{LIKE_, key, value, nil, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // not like
 func (self *Cnd) NotLike(key string, value interface{}) *Cnd {
-	condit := Condition{NO_TLIKE_, key, value, nil}
+	condit := Condition{NO_TLIKE_, key, value, nil, ""}
 	return addDefaultCondit(self, condit)
 }
 
 // or
 func (self *Cnd) Or(cnds ...interface{}) *Cnd {
-	condit := Condition{OR_, "", nil, cnds}
+	condit := Condition{OR_, "", nil, cnds, ""}
 	return addDefaultCondit(self, condit)
 }
 
@@ -268,7 +272,7 @@ func (self *Cnd) Groupby(keys ...string) *Cnd {
 
 // 按字段排序
 func (self *Cnd) Orderby(key string, sortby int) *Cnd {
-	condit := Condition{ORDER_BY_, key, sortby, nil}
+	condit := Condition{ORDER_BY_, key, sortby, nil, ""}
 	self.Orderbys = append(self.Orderbys, condit)
 	return self
 }
