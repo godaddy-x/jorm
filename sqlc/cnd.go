@@ -270,6 +270,19 @@ func (self *Cnd) Groupby(keys ...string) *Cnd {
 	return self
 }
 
+// 聚合函数
+func (self *Cnd) Agg(logic int, key string, alias ...string) *Cnd {
+	if len(key) == 0 {
+		return self
+	}
+	ali := key
+	if alias != nil || len(alias) > 0 {
+		ali = alias[0]
+	}
+	self.Aggregates = append(self.Aggregates, Condition{Logic: logic, Key: key, Alias: ali})
+	return self
+}
+
 // 按字段排序
 func (self *Cnd) Orderby(key string, sortby int) *Cnd {
 	condit := Condition{ORDER_BY_, key, sortby, nil, ""}
