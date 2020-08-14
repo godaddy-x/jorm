@@ -397,13 +397,13 @@ func (self *ConsulManager) CallService(srv string, args interface{}, reply inter
 	defer self.rpcMonitor(monitor, err, args, reply)
 	var conn net.Conn
 	var err1, err2 error
-	conn, err = net.DialTimeout(protocol, host, time.Second*10)
+	conn, err = net.DialTimeout(protocol, host, time.Minute*3)
 	if err != nil {
 		log.Error("consul服务连接失败", 0, log.String("ID", agentID), log.String("host", host), log.String("srv", srv), log.AddError(err))
 		return util.Error("RPC连接失败: ", err)
 	}
 	defer conn.Close()
-	conn.SetReadDeadline(time.Now().Add(time.Minute * 1))
+	conn.SetReadDeadline(time.Now().Add(time.Minute * 3))
 	encBuf := bufio.NewWriter(conn)
 	codec := &gobClientCodec{conn, gob.NewDecoder(conn), gob.NewEncoder(encBuf), encBuf}
 	cli := rpc.NewClientWithCodec(codec)
