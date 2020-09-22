@@ -369,6 +369,7 @@ func (self *MGOManager) FindOne(cnd *sqlc.Cnd, data interface{}) error {
 	if err != nil {
 		return self.Error(err)
 	}
+	cnd.Offset(0,1)
 	pipe, err := self.buildPipeCondition(cnd, false)
 	if err != nil {
 		return self.Error(util.AddStr("mongo构建查询命令失败: ", err.Error()))
