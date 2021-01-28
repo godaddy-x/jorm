@@ -282,6 +282,27 @@ func (self *MGOManager) Delete(datas ...interface{}) error {
 	return nil
 }
 
+func (self *MGOManager) DeleteByIDs(data interface{}, ids ...interface{}) error {
+	if data == nil || len(ids) == 0 {
+		return self.Error("参数列表不能为空")
+	}
+	//start := util.Time()
+	//defer self.debug("DeleteByIDs", &ids, start)
+	if reflect.ValueOf(data).Kind() != reflect.Ptr {
+		return self.Error("参数值必须为指针类型")
+	}
+	copySession := self.Session.Copy()
+	defer copySession.Close()
+	db, err := self.GetDatabase(copySession, data)
+	if err != nil {
+		return self.Error(err)
+	}
+	if _, err := db.RemoveAll(bson.M{"_id": bson.M{"$in": ids}}); err != nil {
+		return self.Error(util.AddStr("删除数据ID失败", err))
+	}
+	return nil
+}
+
 // 统计数据
 func (self *MGOManager) Count(cnd *sqlc.Cnd) (int64, error) {
 	start := util.Time()
@@ -369,7 +390,7 @@ func (self *MGOManager) FindOne(cnd *sqlc.Cnd, data interface{}) error {
 	if err != nil {
 		return self.Error(err)
 	}
-	cnd.Offset(0,1)
+	cnd.Offset(0, 1)
 	pipe, err := self.buildPipeCondition(cnd, false)
 	if err != nil {
 		return self.Error(util.AddStr("mongo构建查询命令失败: ", err.Error()))
