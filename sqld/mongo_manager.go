@@ -561,7 +561,7 @@ func (self *MGOManager) buildPipeCondition(cnd *sqlc.Cnd, iscount bool) ([]inter
 			pipe = append(pipe, v)
 		}
 	}
-	if len(sortby) > 0 {
+	if !iscount && len(sortby) > 0 {
 		tmp := make(map[string]interface{})
 		tmp["$sort"] = sortby
 		pipe = append(pipe, tmp)
