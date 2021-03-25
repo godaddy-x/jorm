@@ -547,12 +547,14 @@ func (self *MGOManager) buildPipeCondition(cnd *sqlc.Cnd, iscount bool) ([]inter
 		tmp := make(map[string]interface{})
 		tmp["$match"] = match
 		pipe = append(pipe, tmp)
+		// 有匹配条件才进行字段筛选
+		if len(project) > 0 {
+			tmp := make(map[string]interface{})
+			tmp["$project"] = project
+			pipe = append(pipe, tmp)
+		}
 	}
-	if len(project) > 0 {
-		tmp := make(map[string]interface{})
-		tmp["$project"] = project
-		pipe = append(pipe, tmp)
-	}
+
 	if len(aggregate1) > 0 {
 		for _, v := range aggregate1 {
 			if len(v) == 0 {
