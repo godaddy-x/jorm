@@ -59,10 +59,9 @@ func (self *PullManager) AddPullReceiver(receivers ...*PullReceiver) {
 func (self *PullManager) start(receiver *PullReceiver) {
 	self.receivers = append(self.receivers, receiver)
 	for {
-		wg := receiver.group
-		wg.Add(1)
+		receiver.group.Add(1)
 		go self.listen(receiver)
-		wg.Wait()
+		receiver.group.Wait()
 		log.Error("消费通道意外关闭,需要重新连接", 0)
 		receiver.channel.Close()
 		time.Sleep(3 * time.Second)
