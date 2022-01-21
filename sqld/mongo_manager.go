@@ -33,13 +33,14 @@ const (
 // 数据库配置
 type MGOConfig struct {
 	DBConfig
-	Addrs     []string
-	Direct    bool
-	Timeout   int64
-	Database  string
-	Username  string
-	Password  string
-	PoolLimit int
+	Addrs         []string
+	Direct        bool
+	Timeout       int64
+	Database      string
+	Username      string
+	Password      string
+	PoolLimit     int
+	ConnectionURI string
 }
 
 // 数据库管理器
@@ -116,22 +117,31 @@ func (self *MGOManager) InitConfigAndCache(manager cache.ICache, input ...MGOCon
 
 func (self *MGOManager) buildByConfig(manager cache.ICache, input ...MGOConfig) error {
 	for _, conf := range input {
-		dialInfo := mgo.DialInfo{
-			Addrs:     conf.Addrs,
-			Direct:    conf.Direct,
-			Timeout:   time.Second * time.Duration(conf.Timeout),
-			Database:  conf.Database,
-			PoolLimit: conf.PoolLimit,
-		}
-		if len(conf.Username) > 0 {
-			dialInfo.Username = conf.Username
-		}
-		if len(conf.Password) > 0 {
-			dialInfo.Password = conf.Password
-		}
-		session, err := mgo.DialWithInfo(&dialInfo)
-		if err != nil {
-			panic("mongo连接初始化失败: " + err.Error())
+		var session *mgo.Session
+		var err error
+		if len(conf.ConnectionURI) == 0 {
+			dialInfo := mgo.DialInfo{
+				Addrs:     conf.Addrs,
+				Direct:    conf.Direct,
+				Timeout:   time.Second * time.Duration(conf.Timeout),
+				Database:  conf.Database,
+				PoolLimit: conf.PoolLimit,
+			}
+			if len(conf.Username) > 0 {
+				dialInfo.Username = conf.Username
+			}
+			if len(conf.Password) > 0 {
+				dialInfo.Password = conf.Password
+			}
+			session, err = mgo.DialWithInfo(&dialInfo)
+			if err != nil {
+				panic("mongo连接初始化失败: " + err.Error())
+			}
+		} else {
+			session, err = mgo.Dial(conf.ConnectionURI)
+			if err != nil {
+				panic("mongo连接初始化失败: " + err.Error())
+			}
 		}
 		session.SetSocketTimeout(3 * time.Minute)
 		session.SetMode(mgo.Monotonic, true)
