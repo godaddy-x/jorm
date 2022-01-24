@@ -33,13 +33,14 @@ const (
 // 数据库配置
 type MGOConfig struct {
 	DBConfig
-	Addrs     []string
-	Direct    bool
-	Timeout   int64
-	Database  string
-	Username  string
-	Password  string
-	PoolLimit int
+	Addrs         []string
+	Direct        bool
+	Timeout       int64
+	Database      string
+	Username      string
+	Password      string
+	PoolLimit     int
+	ConnectionURI string
 }
 
 // 数据库管理器
