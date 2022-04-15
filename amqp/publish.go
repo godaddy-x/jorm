@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/godaddy-x/jorm/log"
+	"github.com/godaddy-x/jorm/util"
 	"github.com/streadway/amqp"
 	"sync"
 	"time"
@@ -84,33 +85,36 @@ func (self *PublishManager) GetChannel(data MsgData) (*QueueData, error) {
 }
 
 func (self *PublishManager) Publish(data MsgData) error {
-	pub, ok := self.channels[data.Exchange+data.Queue]
-	if !ok {
-		self.mu.Lock()
-		defer self.mu.Unlock()
-		pub, ok = self.channels[data.Exchange+data.Queue]
-		if !ok {
-			channel, err := self.conn.Channel()
-			if err != nil {
-				return err
-			}
-			pub = &PublishMQ{channel: channel, exchange: data.Exchange, queue: data.Queue,}
-			pub.prepareExchange()
-			pub.prepareQueue()
-			self.channels[data.Exchange+data.Queue] = pub
-		}
-	}
 	i := 0
 	for {
+		pub, ok := self.channels[data.Exchange+data.Queue]
+		if !ok {
+			self.mu.Lock()
+			defer self.mu.Unlock()
+			pub, ok = self.channels[data.Exchange+data.Queue]
+			if !ok {
+				channel, err := self.conn.Channel()
+				if err != nil {
+					return err
+				}
+				pub = &PublishMQ{channel: channel, exchange: data.Exchange, queue: data.Queue,}
+				pub.prepareExchange()
+				pub.prepareQueue()
+				self.channels[data.Exchange+data.Queue] = pub
+			}
+		}
 		i++
+		if i >= 3 {
+			return nil
+		}
 		if b, err := pub.sendToMQ(data); b && err == nil {
 			return nil
 		} else {
+			if util.HasStr(err.Error(), "connection is not open") {
+				delete(self.channels, data.Exchange+data.Queue)
+			}
 			log.Error("发送MQ数据失败", 0, log.Int("正在尝试次数", i), log.Any("data", data), log.AddError(err))
 			time.Sleep(2 * time.Second)
-		}
-		if i >= 3 {
-			return nil
 		}
 	}
 }
