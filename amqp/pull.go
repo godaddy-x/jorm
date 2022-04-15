@@ -62,8 +62,10 @@ func (self *PullManager) start(receiver *PullReceiver) {
 		receiver.group.Add(1)
 		go self.listen(receiver)
 		receiver.group.Wait()
-		log.Error("消费通道意外关闭,需要重新连接", 0)
-		receiver.channel.Close()
+		log.Error("mq channel close: 消费通道意外关闭,需要重新连接", 0)
+		if err := receiver.channel.Close(); err != nil {
+			log.Error("close mq channel fail", 0, log.AddError(err))
+		}
 		time.Sleep(3 * time.Second)
 	}
 }
@@ -72,14 +74,13 @@ func (self *PullManager) listen(receiver *PullReceiver) {
 	defer receiver.group.Done()
 	channel, err := self.conn.Channel()
 	if err != nil {
-		fmt.Println("初始化Channel异常: ", err)
-		return
+		log.Error("初始化Channel异常", 0, log.AddError(err))
 	} else {
 		receiver.channel = channel
 	}
 	exchange := receiver.ExchangeName()
 	queue := receiver.QueueName()
-	log.Println(fmt.Sprintf("消费队列[%s - %s]服务启动成功...", exchange, queue))
+	log.Error(fmt.Sprintf("消费队列[%s - %s]服务启动成功...", exchange, queue), 0)
 	// testSend(exchange, queue)
 	if err := self.prepareExchange(channel, exchange); err != nil {
 		receiver.OnError(fmt.Errorf("初始化交换机 [%s] 失败: %s", exchange, err.Error()))
@@ -101,7 +102,7 @@ func (self *PullManager) listen(receiver *PullReceiver) {
 		for msg := range msgs {
 			for !receiver.OnReceive(msg.Body) {
 				//fmt.Println("receiver 数据处理失败，将要重试")
-				time.Sleep(3000 * time.Millisecond)
+				time.Sleep(3 * time.Second)
 			}
 			msg.Ack(false)
 		}
@@ -159,7 +160,7 @@ func (self *PullReceiver) QueueName() string {
 }
 
 func (self *PullReceiver) OnError(err error) {
-	log.Error(err.Error(), 0)
+	log.Error("channel pull fail", 0, log.AddError(err))
 }
 
 // 监听对象
