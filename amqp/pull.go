@@ -23,7 +23,7 @@ type PullManager struct {
 
 func (self *PullManager) InitConfig(input ...AmqpConfig) *PullManager {
 	for _, v := range input {
-		c, err := amqp.Dial(fmt.Sprintf("amqp://%s:%s@%s:%d/", v.Username, v.Password, v.Host, v.Port))
+		c, err := amqp.DialConfig(fmt.Sprintf("amqp://%s:%s@%s:%d/", v.Username, v.Password, v.Host, v.Port), amqp.Config{ChannelMax: 999999})
 		if err != nil {
 			panic("RabbitMQ初始化失败: " + err.Error())
 		}
